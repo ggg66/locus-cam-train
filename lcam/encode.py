@@ -1,7 +1,10 @@
-"""Encoding for Qwen2.5-VL: one export record -> input_ids, labels, pixel_values, image_grid_thw.
+"""Encoding for Qwen3.5 (chat template with thinking switched off): one export record -> input_ids, labels,
+pixel_values, image_grid_thw.
 
-Labels: every token of the system/user turn and the images is -100; the assistant turn (target text and the
-closing <|im_end|>) is learned. Geometry records: tokens overlapping a field in `loss_mask_paths` are -100 too.
+The sequence is built as  template(system, user; add_generation_prompt, enable_thinking=False) + target + <|im_end|>
+so the prompt part is exactly what inference sees (including the empty think block the template inserts when
+thinking is off). Labels: every token of the system/user turn and the images is -100; the target text and the
+closing <|im_end|> are learned. Geometry records: tokens overlapping a field in `loss_mask_paths` are -100 too.
 Every encoding checks that the prompt-only tokenisation is a prefix of the full one and that the assistant part
 tokenises the same on its own; a mismatch or a sequence longer than max_length raises instead of truncating.
 """
@@ -24,12 +27,19 @@ def load_images(bundle, rec):
     return [Image.open(os.path.join(bundle, p)).convert('RGB') for p in rec['images']]
 
 
+END = '<|im_end|>'
+
+
+def prompt_text(processor, msgs, enable_thinking=False):
+    return processor.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True, enable_thinking=enable_thinking)
+
+
 def encode(processor, bundle, rec, max_length):
     msgs = messages(rec)
-    full_text = processor.apply_chat_template(msgs, tokenize=False, add_generation_prompt=False)
-    prefix_text = processor.apply_chat_template(msgs[:-1], tokenize=False, add_generation_prompt=True)
-    if not full_text.startswith(prefix_text):
-        raise EncodeError(f'{rec["id"]}: chat template prefix mismatch')
+    prefix_text = prompt_text(processor, msgs[:-1])
+    if END not in processor.tokenizer.get_vocab():
+        raise EncodeError(f'{END} is not a single token of this tokenizer')
+    full_text = prefix_text + rec['target'] + END
     images = load_images(bundle, rec)
     full = processor(text=[full_text], images=images, return_tensors='pt')
     prefix = processor(text=[prefix_text], images=images, return_tensors='pt')

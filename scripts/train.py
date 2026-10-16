@@ -76,8 +76,8 @@ def main():
     json.dump(run, open(os.path.join(a.out, 'run.json'), 'w'), ensure_ascii=False, indent=1, default=str)
     processor = load_processor(cfg)
     torch.manual_seed(a.seed)
-    model, attn = load_model(cfg, for_training=True)
-    run['attention'] = attn
+    model, info = load_model(cfg, for_training=True)
+    run['model_info'] = info
     run['params'] = trainable_summary(model)
     json.dump(run, open(os.path.join(a.out, 'run.json'), 'w'), ensure_ascii=False, indent=1, default=str)
     pad = processor.tokenizer.pad_token_id

@@ -18,7 +18,7 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lcam import config as C  # noqa: E402
-from lcam.encode import load_images  # noqa: E402
+from lcam.encode import load_images, prompt_text  # noqa: E402
 from lcam.model import load_model, load_processor  # noqa: E402
 
 
@@ -31,6 +31,7 @@ def main():
     ap.add_argument('--adapter', default=None)
     ap.add_argument('--max-new-tokens', type=int, default=None)
     ap.add_argument('--batch', type=int, default=8)
+    ap.add_argument('--thinking', action='store_true', help='B0 only: keep the model thinking mode (default off, as in training)')
     a = ap.parse_args()
     cfg = C.load(a.config)
     max_new = a.max_new_tokens or cfg['evaluation'].get('max_new_tokens', 512)
@@ -51,7 +52,7 @@ def main():
             for it in chunk:
                 user = [{'type': 'image', 'image': p} for p in it['images']] + [{'type': 'text', 'text': it['prompt']}]
                 msgs = [{'role': 'system', 'content': [{'type': 'text', 'text': it['system']}]}, {'role': 'user', 'content': user}]
-                texts.append(processor.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True))
+                texts.append(prompt_text(processor, msgs, enable_thinking=a.thinking))
                 images.extend(load_images(a.bundle, it))
             enc = processor(text=texts, images=images or None, return_tensors='pt', padding=True).to('cuda')
             with torch.no_grad():
@@ -64,7 +65,7 @@ def main():
                 f.write(json.dumps({'task_id': it['task_id'], 'sample': it['sample'], 'condition': it['condition'], 'split': it['split'],
                                     'raw': processor.tokenizer.decode(row, skip_special_tokens=True), 'infra_error': None, 'new_tokens': n,
                                     'finish': 'length' if n >= max_new and eos not in ids else 'stop',
-                                    'adapter': a.adapter, 'decoding': 'greedy'}, ensure_ascii=False) + '\n')
+                                    'adapter': a.adapter, 'decoding': 'greedy', 'thinking': a.thinking}, ensure_ascii=False) + '\n')
             f.flush()
             print(f'{min(i + a.batch, len(todo))}/{len(todo)}', flush=True)
 

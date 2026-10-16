@@ -1,27 +1,51 @@
-"""Model and processor loading for Qwen2.5-VL-7B-Instruct with LoRA on the language model only."""
+"""Model and processor loading for Qwen3.5-35B-A3B (multimodal MoE: 40 layers = 30 Gated DeltaNet + 10 gated
+full-attention layers, each followed by an MoE block with 256 routed experts, 8 active + 1 shared expert).
+
+LoRA placement (configs/common.yaml `trainable.lora_on`): the linear layers of both attention kinds and of the
+shared expert. Routed experts, the router, embeddings, lm_head and the whole vision tower stay frozen. Module
+names are discovered from the loaded model, not hard-coded, and the chosen list is written to run.json so it can
+be checked before any training.
+"""
 import torch
 
-LM_TARGET_REGEX = r'^(?!.*visual).*layers\.\d+\.(self_attn\.(q_proj|k_proj|v_proj|o_proj)|mlp\.(gate_proj|up_proj|down_proj))$'
+from .targets import classify
 
 
 def load_processor(cfg):
     from transformers import AutoProcessor
-    m, p = cfg['model'], cfg['processor']
-    return AutoProcessor.from_pretrained(m['id'], revision=m['revision'], min_pixels=p['min_pixels'], max_pixels=p['max_pixels'])
+    m, p = cfg['model'], cfg.get('processor') or {}
+    kw = {}
+    if p.get('min_pixels') or p.get('max_pixels'):
+        kw = {'size': {'shortest_edge': p['min_pixels'], 'longest_edge': p['max_pixels']}}
+    return AutoProcessor.from_pretrained(m['id'], revision=m['revision'], **kw)
+
+
+def _model_class():
+    import transformers
+    for name in ('AutoModelForMultimodalLM', 'AutoModelForImageTextToText'):
+        if hasattr(transformers, name):
+            return getattr(transformers, name)
+    raise SystemExit('this transformers version has no multimodal auto class; install a version that supports qwen3_5_moe')
+
+
+def lora_targets(model, lora_on):
+    """Full module names of nn.Linear layers whose category is in `lora_on`, plus a count per category."""
+    names, counts = [], {}
+    for name, mod in model.named_modules():
+        if isinstance(mod, torch.nn.Linear):
+            c = classify(name)
+            counts[c] = counts.get(c, 0) + 1
+            if c in lora_on:
+                names.append(name)
+    return names, counts
 
 
 def load_model(cfg, adapter=None, for_training=False):
-    from transformers import Qwen2_5_VLForConditionalGeneration
     m = cfg['model']
     if m.get('revision') in (None, 'TBD'):
         raise SystemExit('pin model.revision in configs/common.yaml to the downloaded commit hash first')
-    try:
-        import flash_attn  # noqa: F401
-        attn = 'flash_attention_2'
-    except ImportError:
-        attn = 'sdpa'
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(m['id'], revision=m['revision'], torch_dtype=torch.bfloat16,
-                                                               attn_implementation=attn, device_map='cuda')
+    model = _model_class().from_pretrained(m['id'], revision=m['revision'], torch_dtype=torch.bfloat16, device_map=m.get('device_map', 'auto'))
+    info = {'class': type(model).__name__}
     if adapter:
         from peft import PeftModel
         model = PeftModel.from_pretrained(model, adapter, is_trainable=for_training)
@@ -30,15 +54,24 @@ def load_model(cfg, adapter=None, for_training=False):
         t = cfg['trainable']
         for p in model.parameters():
             p.requires_grad_(False)
+        targets, counts = lora_targets(model, set(t['lora_on']))
+        if not targets:
+            raise SystemExit(f'no LoRA targets found; linear layers by category: {counts}')
+        info['linear_layers_by_category'] = counts
+        info['lora_target_count'] = len(targets)
+        info['lora_target_examples'] = targets[:12]
         model = get_peft_model(model, LoraConfig(r=t['lora_r'], lora_alpha=t['lora_alpha'], lora_dropout=t['lora_dropout'],
-                                                 target_modules=LM_TARGET_REGEX, bias='none', task_type='CAUSAL_LM'))
+                                                 target_modules=targets, bias='none'))
     if for_training:
         model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={'use_reentrant': False})
         model.enable_input_require_grads()
-        bad = [n for n, p in model.named_parameters() if p.requires_grad and ('visual' in n or 'lora_' not in n)]
+        bad = [n for n, p in model.named_parameters() if p.requires_grad and 'lora_' not in n]
         if bad:
-            raise SystemExit(f'unexpected trainable parameters (vision tower / merger / base weights): {bad[:5]}')
-    return model, attn
+            raise SystemExit(f'unexpected trainable parameters: {bad[:5]}')
+        frozen_bad = [n for n, p in model.named_parameters() if p.requires_grad and classify(n) in ('vision', 'routed_expert', 'router', 'embedding')]
+        if frozen_bad:
+            raise SystemExit(f'LoRA reached frozen components: {frozen_bad[:5]}')
+    return model, info
 
 
 def trainable_summary(model):

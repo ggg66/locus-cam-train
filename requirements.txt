@@ -1,9 +1,14 @@
-# Starting point for the training server (CUDA 12.x). Not installed or run on the authoring machine; pin the
-# versions you actually install and record them (scripts/train.py writes them into run.json).
-torch==2.6.0
-transformers==4.51.3
-peft==0.15.2
-accelerate==1.6.0
+# Starting point for the training server (CUDA 12.x). Not installed or run on the authoring machine. Qwen3.5
+# (model_type qwen3_5_moe) needs a recent transformers; the model card suggests installing from main. Pin the exact
+# commit you install; scripts/train.py writes the versions into run.json.
+torch>=2.6
+transformers @ git+https://github.com/huggingface/transformers.git@main
+peft>=0.15
+accelerate>=1.6
 pillow>=10
 pyyaml>=6
-# optional, faster attention:  pip install flash-attn --no-build-isolation
+# Gated DeltaNet layers fall back to a slow torch path without these kernels:
+flash-linear-attention
+causal-conv1d
+# inference (B0 thinking mode especially): a vLLM release that supports Qwen3.5
+# vllm

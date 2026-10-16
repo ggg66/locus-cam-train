@@ -34,10 +34,10 @@ def main():
         raise SystemExit('backward probe needs LCAM_ALLOW_BACKWARD_PROBE=1 (separate authorisation)')
     cfg = C.load(a.config)
     processor = load_processor(cfg)
-    model, attn = load_model(cfg, for_training=probe)
+    model, info = load_model(cfg, for_training=probe)
     recs = load_exports(a.bundle, 'train', ['action_sft', 'geometry_sft'])
     pool = [r for pair in zip(recs['action_sft'], recs['geometry_sft']) for r in pair]
-    res = {'attention': attn, 'params': trainable_summary(model), 'micro_batch': a.micro_batch, 'batches': []}
+    res = {'model_info': info, 'params': trainable_summary(model), 'micro_batch': a.micro_batch, 'batches': []}
     pad = processor.tokenizer.pad_token_id
     for b in range(a.batches):
         chunk = pool[b * a.micro_batch:(b + 1) * a.micro_batch]

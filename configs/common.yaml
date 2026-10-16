@@ -1,13 +1,16 @@
 # Shared settings for B0/B1/B2 (draft; nothing here has been run). Pin every "TBD" on the training server
 # before the first run and copy this file next to the outputs.
 model:
-  id: Qwen/Qwen2.5-VL-7B-Instruct
-  revision: TBD            # commit hash of the weights actually downloaded on the server
+  id: Qwen/Qwen3.5-35B-A3B   # multimodal MoE, 35B total / 3B active (decided 2026-10-16, replaces Qwen2.5-VL-7B-Instruct)
+  revision: TBD              # commit hash of the weights actually downloaded on the server
   dtype: bfloat16
+  device_map: auto           # bf16 weights ~70 GB: one 141 GB GPU, or split over two 80 GB GPUs
 processor:
-  min_pixels: 200704       # 256 * 28 * 28
-  max_pixels: 1003520      # 1280 * 28 * 28 -> main 640x360 ~ 299 visual tokens, overhead 640x(360..1280) ~ 299..1058
-  images_per_sample: 2     # main, overhead (V0); order fixed
+  min_pixels: null           # null = processor defaults; images are 640x360 (main) and 640x360..1280 (overhead)
+  max_pixels: null           # visual tokens at 32-pixel cells: main ~220, overhead ~220..800 (check_data.py reports the real numbers)
+  images_per_sample: 2       # main, overhead (V0); order fixed
+chat:
+  enable_thinking: false     # training targets are bare JSON answers; inference for trained arms uses the same template
 data:
   # paths are inside the data bundle (--bundle); files are listed explicitly, never globbed
   train_exports: training_exports/train/{action_sft,geometry_sft}.jsonl
@@ -21,9 +24,7 @@ trainable:
   lora_r: 64
   lora_alpha: 128
   lora_dropout: 0.05
-  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]   # language model only
-  vision_tower: frozen
-  merger: frozen
+  lora_on: [attention, shared_expert]   # both attention kinds + the shared expert; routed experts, router, vision tower frozen
 optim:
   optimizer: adamw
   lr: 1.0e-4

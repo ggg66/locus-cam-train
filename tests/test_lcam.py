@@ -10,6 +10,7 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lcam.parse import parse  # noqa: E402
 from lcam.spans import dumps_with_spans, masked_char_spans, token_mask  # noqa: E402
+from lcam.targets import classify  # noqa: E402
 
 import importlib.util  # noqa: E402
 _spec = importlib.util.spec_from_file_location('lcam_data', os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'lcam', 'data.py'))
@@ -68,6 +69,19 @@ class Schedule(unittest.TestCase):
             data.load_exports('/nonexistent', 'train', ['outcome_records'])
         with self.assertRaises(ValueError):
             data.load_exports('/nonexistent', 'train', ['geometry_sft_privileged'])
+
+
+class Targets(unittest.TestCase):
+    def test_categories(self):
+        L = 'model.language_model.layers.3'
+        self.assertEqual(classify(f'{L}.self_attn.q_proj'), 'attention')
+        self.assertEqual(classify(f'{L}.linear_attn.in_proj_qkvz'), 'attention')
+        self.assertEqual(classify(f'{L}.mlp.shared_expert.up_proj'), 'shared_expert')
+        self.assertEqual(classify(f'{L}.mlp.shared_expert_gate'), 'shared_expert_gate')
+        self.assertEqual(classify(f'{L}.mlp.experts.17.down_proj'), 'routed_expert')
+        self.assertEqual(classify(f'{L}.mlp.gate'), 'router')
+        self.assertEqual(classify('model.visual.blocks.0.attn.qkv'), 'vision')
+        self.assertEqual(classify('lm_head'), 'embedding')
 
 
 class Parse(unittest.TestCase):

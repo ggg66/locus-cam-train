@@ -59,7 +59,7 @@ def schedule(recs, mix, n_samples, seed):
 
 
 def messages(rec):
-    """Qwen2.5-VL chat messages: system, user (images in fixed order, then the prompt), assistant target."""
+    """Chat messages (Qwen chat format): system, user (images in fixed order, then the prompt), assistant target."""
     user = [{'type': 'image', 'image': p} for p in rec['images']] + [{'type': 'text', 'text': rec['prompt']}]
     return [{'role': 'system', 'content': [{'type': 'text', 'text': rec['system']}]},
             {'role': 'user', 'content': user},
