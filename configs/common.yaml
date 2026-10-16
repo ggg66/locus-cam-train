@@ -1,0 +1,41 @@
+# Shared settings for B0/B1/B2 (draft; nothing here has been run). Pin every "TBD" on the training server
+# before the first run and copy this file next to the outputs.
+model:
+  id: Qwen/Qwen2.5-VL-7B-Instruct
+  revision: TBD            # commit hash of the weights actually downloaded on the server
+  dtype: bfloat16
+processor:
+  min_pixels: 200704       # 256 * 28 * 28
+  max_pixels: 1003520      # 1280 * 28 * 28 -> main 640x360 ~ 299 visual tokens, overhead 640x(360..1280) ~ 299..1058
+  images_per_sample: 2     # main, overhead (V0); order fixed
+data:
+  # paths are inside the data bundle (--bundle); files are listed explicitly, never globbed
+  train_exports: training_exports/train/{action_sft,geometry_sft}.jsonl
+  validation_prompts: eval_prompts/validation_V0.jsonl
+  isolation_index: splits_index.json
+  max_length: 4096                        # measured length on the server must be < this; truncation = error, not silent
+  loss_on: assistant_tokens_only          # prompt, images and system masked
+  geometry_loss_mask: loss_mask_paths     # Geometry-SFT: masked fields excluded from the loss
+trainable:
+  method: lora
+  lora_r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  target_modules: [q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj]   # language model only
+  vision_tower: frozen
+  merger: frozen
+optim:
+  optimizer: adamw
+  lr: 1.0e-4
+  schedule: cosine
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  effective_batch_size: 64
+  seeds: [0, 1, 2]         # minimum 1 if the budget is short; decide before the first run, not after
+checkpoint_selection:
+  metric: validation V0 success (end-to-end, scorer score-v1.0.0), 400 roots, greedy decoding
+  every: 0.5 epoch-equivalents of action exposure
+  test: only the selected checkpoint, once, after selection is frozen
+evaluation:
+  test_condition: V0 only, one submission, no tools, no S, no solver, no search
+  decoding: greedy, max_new_tokens 512 (Action-SFT answers are short)

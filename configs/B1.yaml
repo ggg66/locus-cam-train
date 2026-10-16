@@ -1,0 +1,9 @@
+# B1: Action-SFT only.
+base: common.yaml
+arm: B1
+mix:
+  action_sft: 1.0
+budget:
+  primary_fixed_total:   {samples: 15000}          # ~3 passes over the ~5000 train roots
+  secondary_matched:     {samples: 20000}          # control for B2-secondary: same total samples, all action
+label_rule: robust feasible; min L1; then lexicographic "r,u,b" (training_exports/export.py)

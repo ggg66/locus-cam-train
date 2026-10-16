@@ -1,0 +1,5 @@
+# B0: the untrained target model. Same prompts, images and scorer as the trained arms.
+base: common.yaml
+arm: B0
+train: none
+evaluate: [validation, test_id, test_geometry, test_composition]

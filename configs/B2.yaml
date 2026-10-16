@@ -1,0 +1,12 @@
+# B2: Action-SFT + Geometry-SFT (masked; NOT the privileged file). Test is still V0 -> one action.
+base: common.yaml
+arm: B2
+mix:
+  action_sft: 0.667
+  geometry_sft: 0.333
+budget:
+  primary_fixed_total:   {samples: 15000, action_exposures: ~10000, geometry_exposures: ~5000}
+  secondary_matched:     {samples: 20000, action_exposures: 15000, geometry_exposures: 5000}   # compare with B1 secondary (20000 action)
+outcome_records: not used in B2 (kept as a separate resource so the effect of geometry supervision can be attributed)
+privileged_geometry: not used
+record: real exposure counts per data type per checkpoint

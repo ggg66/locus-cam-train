@@ -1,0 +1,9 @@
+# Starting point for the training server (CUDA 12.x). Not installed or run on the authoring machine; pin the
+# versions you actually install and record them (scripts/train.py writes them into run.json).
+torch==2.6.0
+transformers==4.51.3
+peft==0.15.2
+accelerate==1.6.0
+pillow>=10
+pyyaml>=6
+# optional, faster attention:  pip install flash-attn --no-build-isolation
