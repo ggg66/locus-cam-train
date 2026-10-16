@@ -1,9 +1,10 @@
-# Starting point for the training server (CUDA 12.x). Not installed or run on the authoring machine. Qwen3.5
-# (model_type qwen3_5_moe) needs a recent transformers; the model card suggests installing from main. Pin the exact
-# commit you install; scripts/train.py writes the versions into run.json.
+# Training server (CUDA 12.x). The mock pipeline (tests/mock/) passed on CPU with: torch 2.14.1, torchvision 0.29.1,
+# transformers 5.20.0 (released, includes qwen3_5_moe), peft 0.21.2, accelerate, pillow, pyyaml (Python 3.12).
+# Pin what you install on the server; scripts/train.py writes the versions into run.json.
 torch>=2.6
-transformers @ git+https://github.com/huggingface/transformers.git@main
-peft>=0.15
+torchvision            # required by the Qwen3.5 processor (Qwen3VLVideoProcessor), even for images only
+transformers>=5.20
+peft>=0.21
 accelerate>=1.6
 pillow>=10
 pyyaml>=6

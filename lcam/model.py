@@ -17,7 +17,8 @@ def load_processor(cfg):
     kw = {}
     if p.get('min_pixels') or p.get('max_pixels'):
         kw = {'size': {'shortest_edge': p['min_pixels'], 'longest_edge': p['max_pixels']}}
-    return AutoProcessor.from_pretrained(m['id'], revision=m['revision'], **kw)
+    import os
+    return AutoProcessor.from_pretrained(m['id'], revision=None if os.path.isdir(m['id']) else m['revision'], **kw)
 
 
 def _model_class():
@@ -28,23 +29,29 @@ def _model_class():
     raise SystemExit('this transformers version has no multimodal auto class; install a version that supports qwen3_5_moe')
 
 
-def lora_targets(model, lora_on):
-    """Full module names of nn.Linear layers whose category is in `lora_on`, plus a count per category."""
-    names, counts = [], {}
+def lora_targets(model, lora_on, rank):
+    """Full module names of nn.Linear layers whose category is in `lora_on` and whose smaller side is at least the
+    LoRA rank (this skips e.g. the per-head decay/beta projections of Gated DeltaNet), plus counts per category."""
+    names, counts, skipped = [], {}, []
     for name, mod in model.named_modules():
         if isinstance(mod, torch.nn.Linear):
             c = classify(name)
             counts[c] = counts.get(c, 0) + 1
             if c in lora_on:
-                names.append(name)
-    return names, counts
+                if min(mod.in_features, mod.out_features) >= rank:
+                    names.append(name)
+                else:
+                    skipped.append(name)
+    return names, counts, skipped
 
 
 def load_model(cfg, adapter=None, for_training=False):
     m = cfg['model']
-    if m.get('revision') in (None, 'TBD'):
+    import os
+    local = os.path.isdir(m['id'])
+    if not local and m.get('revision') in (None, 'TBD'):
         raise SystemExit('pin model.revision in configs/common.yaml to the downloaded commit hash first')
-    model = _model_class().from_pretrained(m['id'], revision=m['revision'], torch_dtype=torch.bfloat16, device_map=m.get('device_map', 'auto'))
+    model = _model_class().from_pretrained(m['id'], revision=None if local else m['revision'], dtype=torch.bfloat16, device_map=m.get('device_map', 'auto'))
     info = {'class': type(model).__name__}
     if adapter:
         from peft import PeftModel
@@ -54,12 +61,14 @@ def load_model(cfg, adapter=None, for_training=False):
         t = cfg['trainable']
         for p in model.parameters():
             p.requires_grad_(False)
-        targets, counts = lora_targets(model, set(t['lora_on']))
+        targets, counts, skipped = lora_targets(model, set(t['lora_on']), t['lora_r'])
         if not targets:
             raise SystemExit(f'no LoRA targets found; linear layers by category: {counts}')
         info['linear_layers_by_category'] = counts
         info['lora_target_count'] = len(targets)
         info['lora_target_examples'] = targets[:12]
+        info['lora_skipped_smaller_than_rank'] = skipped[:12]
+        info['lora_skipped_count'] = len(skipped)
         model = get_peft_model(model, LoraConfig(r=t['lora_r'], lora_alpha=t['lora_alpha'], lora_dropout=t['lora_dropout'],
                                                  target_modules=targets, bias='none'))
     if for_training:

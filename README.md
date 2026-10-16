@@ -12,7 +12,32 @@
 
 这个仓库只放代码和配置。数据由基准目录里的 `training_exports/make_server_bundle.py` 打成一个包，单独传到服务器。
 
-**状态：代码没有在 GPU 上运行过。** 只做过两件事：在编写机上跑通标准库测试（JSON 字段定位、mask 路径、采样计划、解析规则；其中 mask 路径已在 5,453 条真实几何标签上核对），以及语法检查。依赖 torch 和 transformers 的部分，必须在服务器上按下面的顺序逐步验证。
+**状态：完整流程已在本机用缩小版模型跑通，但还没有在 GPU 上用真实权重跑过。** 缩小版模型用的是真实的模型类、分词器、图像处理器和对话模板，层的排布和 MoE 结构也和原模型一致，只是层数和维度缩小、权重随机。依次跑通了下面这些：
+
+- **数据核对**：真实样本截取的小包，24 条全部编码成功；被 mask 的几何字段确实没有计入 loss。
+- **前向检查**：loss 为 12.43，正好等于 ln(词表大小)，说明标签和 mask 对齐无误。
+- **显存探针**：LoRA 正确加在两种注意力层和共享专家上，路由专家、router、视觉部分都冻结；反向传播正常。
+- **训练**：B1 和 B2 各跑若干步。计划曝光次数与实际一致（B2 是 2:1），检查点按动作曝光次数保存，LoRA 权重确实被更新。
+- **过拟合测试**（`tests/mock/overfit_check.py`）：训练后，用推理脚本对同样的提示词生成，能一字不差地输出目标答案，并在 `<|im_end|>` 处停止。这说明训练时拼的提示词和推理时完全一致。
+- **推理和选检查点**：带适配器和不带适配器、有图和无图、开启推理模式都能生成；输出文件能直接交给基准评分器打分。
+
+**没有测到的部分**：`scripts/infer_vllm.py`（vLLM 不支持 macOS）；`flash-linear-attention` / `causal-conv1d` 两个加速内核；真实权重下的显存和速度；多卡切分（`device_map: auto`）。
+
+**上服务器前，先用缩小版模型做一遍冒烟测试**（几分钟就能跑完，不需要下载权重）：
+
+```bash
+python tests/mock/make_tiny_model.py <只含 Qwen3.5-35B-A3B 配置和分词器文件的目录> /tmp/tiny-model
+```
+
+```bash
+python tests/mock/make_mini_bundle.py /data/locus-bundle /tmp/mini-bundle
+```
+
+然后把一份 `configs/common.yaml` 里的 `model.id` 指向 `/tmp/tiny-model`，按下面的第 1–6 步对 `/tmp/mini-bundle` 跑一遍，再运行：
+
+```bash
+python tests/mock/overfit_check.py --config <这份配置所在的目录> --work /tmp/overfit
+```
 
 ## 目录
 
@@ -30,6 +55,7 @@
 | `scripts/infer.py` | 用 transformers 贪心解码生成答案，输出格式与基准评分器的提交格式一致 |
 | `scripts/infer_vllm.py` | 用 vLLM 推理，速度快，B0 开启推理模式时用它；关闭推理时用贪心解码，开启时按模型卡推荐的采样参数 |
 | `scripts/select_checkpoint.py` | 只根据验证集选检查点 |
+| `tests/mock/` | 缩小版模型、迷你数据包、过拟合一致性测试，用于不下载权重的冒烟测试 |
 
 ## 服务器上的步骤
 

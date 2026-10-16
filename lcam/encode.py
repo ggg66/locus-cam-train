@@ -40,7 +40,7 @@ def encode(processor, bundle, rec, max_length):
     if END not in processor.tokenizer.get_vocab():
         raise EncodeError(f'{END} is not a single token of this tokenizer')
     full_text = prefix_text + rec['target'] + END
-    images = load_images(bundle, rec)
+    images = load_images(bundle, rec) or None
     full = processor(text=[full_text], images=images, return_tensors='pt')
     prefix = processor(text=[prefix_text], images=images, return_tensors='pt')
     ids = full['input_ids'][0]
@@ -66,10 +66,13 @@ def encode(processor, bundle, rec, max_length):
             if hit:
                 labels[p + j] = IGNORE
                 n_masked += 1
-    grid = full['image_grid_thw']
+    # other per-token fields the processor returns (e.g. mm_token_type_ids, needed for multimodal RoPE) are kept
+    extra = {k: v[0] for k, v in full.items()
+             if k not in ('input_ids', 'attention_mask', 'pixel_values', 'image_grid_thw') and hasattr(v, 'shape') and v.dim() == 2 and v.shape[1] == ids.shape[0]}
+    grid = full.get('image_grid_thw')
     merge = getattr(processor.image_processor, 'merge_size', 2)
-    n_visual = int((grid.prod(dim=1) // (merge * merge)).sum())
-    return {'input_ids': ids, 'labels': labels, 'pixel_values': full['pixel_values'], 'image_grid_thw': grid,
+    n_visual = int((grid.prod(dim=1) // (merge * merge)).sum()) if grid is not None else 0
+    return {'input_ids': ids, 'labels': labels, 'pixel_values': full.get('pixel_values'), 'image_grid_thw': grid, 'extra': extra,
             'stats': {'id': rec['id'], 'tokens': int(ids.shape[0]), 'prompt_tokens': p, 'visual_tokens': n_visual,
                       'target_tokens': int(ids.shape[0]) - p, 'masked_target_tokens': n_masked}}
 
@@ -84,5 +87,14 @@ def collate(batch, pad_id):
         ids[i, :k] = b['input_ids']
         labels[i, :k] = b['labels']
         att[i, :k] = 1
-    return {'input_ids': ids, 'labels': labels, 'attention_mask': att,
-            'pixel_values': torch.cat([b['pixel_values'] for b in batch]), 'image_grid_thw': torch.cat([b['image_grid_thw'] for b in batch])}
+    out = {'input_ids': ids, 'labels': labels, 'attention_mask': att}
+    with_img = [b for b in batch if b['pixel_values'] is not None]
+    if with_img:
+        out['pixel_values'] = torch.cat([b['pixel_values'] for b in with_img])
+        out['image_grid_thw'] = torch.cat([b['image_grid_thw'] for b in with_img])
+    for key in batch[0].get('extra', {}):
+        t = torch.zeros((len(batch), n), dtype=batch[0]['extra'][key].dtype)
+        for i, b in enumerate(batch):
+            t[i, :b['extra'][key].shape[0]] = b['extra'][key]
+        out[key] = t
+    return out

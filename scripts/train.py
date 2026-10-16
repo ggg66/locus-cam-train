@@ -81,6 +81,7 @@ def main():
     run['params'] = trainable_summary(model)
     json.dump(run, open(os.path.join(a.out, 'run.json'), 'w'), ensure_ascii=False, indent=1, default=str)
     pad = processor.tokenizer.pad_token_id
+    dev = next(model.parameters()).device
     dl = DataLoader(Scheduled(seq, recs, processor, a.bundle, cfg['data']['max_length']), batch_size=a.micro_batch, shuffle=False,
                     num_workers=a.workers, collate_fn=lambda b: (collate(b, pad), [x['kind'] for x in b], [x['stats'] for x in b]))
     if not a.allow_optimizer_step:
@@ -99,7 +100,7 @@ def main():
     model.train()
     micro, loss_acc, t0 = 0, 0.0, time.time()
     for batch, kinds, stats in dl:
-        batch = {k: v.cuda() for k, v in batch.items()}
+        batch = {k: v.to(dev) for k, v in batch.items()}
         out = model(**batch)
         loss = out.loss / accum  # mean of micro-batch token means over the effective batch
         loss.backward()
@@ -123,7 +124,8 @@ def main():
                 d = os.path.join(a.out, 'checkpoints', f'ckpt-{k_ckpt}')
                 model.save_pretrained(d)
                 json.dump({'step': step, 'exposures': dict(seen), 'tokens': tokens}, open(os.path.join(d, 'exposures.json'), 'w'))
-                next_ckpt += ckpt_every
+                while next_ckpt <= seen.get('action_sft', 0):
+                    next_ckpt += ckpt_every
     run['finished'] = time.strftime('%Y-%m-%d %H:%M:%S')
     run['actual_exposures'] = seen
     run['tokens_seen'] = tokens

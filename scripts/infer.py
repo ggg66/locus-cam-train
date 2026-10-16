@@ -45,6 +45,9 @@ def main():
     if os.path.exists(a.out):
         done = {(json.loads(l)['task_id'], json.loads(l)['sample'], json.loads(l)['condition']) for l in open(a.out)}
     todo = [it for it in items if (it['task_id'], it['sample'], it['condition']) not in done]
+    # stop explicitly at <|im_end|> (the end of an assistant turn) instead of relying on the checkpoint's generation_config
+    tok = processor.tokenizer
+    stop_ids = sorted({tok.convert_tokens_to_ids('<|im_end|>'), tok.eos_token_id} - {None})
     with open(a.out, 'a', encoding='utf-8') as f:
         for i in range(0, len(todo), a.batch):
             chunk = todo[i:i + a.batch]
@@ -54,17 +57,16 @@ def main():
                 msgs = [{'role': 'system', 'content': [{'type': 'text', 'text': it['system']}]}, {'role': 'user', 'content': user}]
                 texts.append(prompt_text(processor, msgs, enable_thinking=a.thinking))
                 images.extend(load_images(a.bundle, it))
-            enc = processor(text=texts, images=images or None, return_tensors='pt', padding=True).to('cuda')
+            enc = processor(text=texts, images=images or None, return_tensors='pt', padding=True).to(next(model.parameters()).device)
             with torch.no_grad():
-                gen = model.generate(**enc, max_new_tokens=max_new, do_sample=False)
+                gen = model.generate(**enc, max_new_tokens=max_new, do_sample=False, eos_token_id=stop_ids, pad_token_id=processor.tokenizer.pad_token_id)
             new = gen[:, enc['input_ids'].shape[1]:]
             for it, row in zip(chunk, new):
                 ids = row.tolist()
-                eos = processor.tokenizer.eos_token_id
                 n = len([t for t in ids if t != processor.tokenizer.pad_token_id])
                 f.write(json.dumps({'task_id': it['task_id'], 'sample': it['sample'], 'condition': it['condition'], 'split': it['split'],
                                     'raw': processor.tokenizer.decode(row, skip_special_tokens=True), 'infra_error': None, 'new_tokens': n,
-                                    'finish': 'length' if n >= max_new and eos not in ids else 'stop',
+                                    'finish': 'stop' if any(t in stop_ids for t in ids) else 'length',
                                     'adapter': a.adapter, 'decoding': 'greedy', 'thinking': a.thinking}, ensure_ascii=False) + '\n')
             f.flush()
             print(f'{min(i + a.batch, len(todo))}/{len(todo)}', flush=True)

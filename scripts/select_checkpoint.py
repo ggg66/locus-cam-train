@@ -20,6 +20,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--bundle', required=True)
     ap.add_argument('--run', required=True)
+    ap.add_argument('--expect', type=int, default=400, help='validation answers required per checkpoint')
     a = ap.parse_args()
     index = json.load(open(os.path.join(a.bundle, 'validation_tables', 'index.json')))  # task_id -> root_id
     rows = []
@@ -34,8 +35,8 @@ def main():
         rows.append({'checkpoint': os.path.basename(path)[:-6], 'n': n, 'success': round(res.get('satisfied', 0) / n, 4) if n else None, 'outcomes': res})
     if not rows:
         raise SystemExit('no validation outputs found')
-    if any(r['n'] != 400 for r in rows):
-        raise SystemExit(f'every checkpoint needs all 400 validation answers: {[(r["checkpoint"], r["n"]) for r in rows]}')
+    if any(r['n'] != a.expect for r in rows):
+        raise SystemExit(f'every checkpoint needs all {a.expect} validation answers: {[(r["checkpoint"], r["n"]) for r in rows]}')
     best = max(rows, key=lambda r: (r['success'], -int(r['checkpoint'].split('-')[1])))
     json.dump({'rule': 'max validation V0 success; ties -> earlier checkpoint', 'checkpoints': rows, 'selected': best['checkpoint']},
               open(os.path.join(a.run, 'selection.json'), 'w'), indent=1)

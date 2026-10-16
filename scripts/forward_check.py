@@ -39,11 +39,13 @@ def main():
     pool = [r for pair in zip(recs['action_sft'], recs['geometry_sft']) for r in pair]
     res = {'model_info': info, 'params': trainable_summary(model), 'micro_batch': a.micro_batch, 'batches': []}
     pad = processor.tokenizer.pad_token_id
+    dev = next(model.parameters()).device
     for b in range(a.batches):
         chunk = pool[b * a.micro_batch:(b + 1) * a.micro_batch]
         enc = [encode(processor, a.bundle, r, cfg['data']['max_length']) for r in chunk]
-        batch = {k: v.cuda() for k, v in collate(enc, pad).items()}
-        torch.cuda.reset_peak_memory_stats()
+        batch = {k: v.to(dev) for k, v in collate(enc, pad).items()}
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
         if probe:
             model.train()
             out = model(**batch)
@@ -54,7 +56,7 @@ def main():
             with torch.no_grad():
                 out = model(**batch)
         res['batches'].append({'ids': [r['id'] for r in chunk], 'loss': round(out.loss.item(), 4), 'seq_len': int(batch['input_ids'].shape[1]),
-                               'learned_tokens': int((batch['labels'] != -100).sum()), 'peak_gb': round(torch.cuda.max_memory_allocated() / 2 ** 30, 2)})
+                               'learned_tokens': int((batch['labels'] != -100).sum()), 'peak_gb': round(torch.cuda.max_memory_allocated() / 2 ** 30, 2) if torch.cuda.is_available() else None, 'device': str(dev)})
         print(json.dumps(res['batches'][-1], ensure_ascii=False), flush=True)
     res['mode'] = 'forward+backward probe (no optimizer)' if probe else 'forward only'
     os.makedirs(os.path.join(a.bundle, 'checks'), exist_ok=True)
