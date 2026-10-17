@@ -17,8 +17,9 @@ from transformers import AutoConfig, Qwen3_5MoeForConditionalGeneration
 
 src, out = sys.argv[1], sys.argv[2]
 os.makedirs(out, exist_ok=True)
-for f in os.listdir(src):
-    if f not in ('config.json', 'model.safetensors.index.json') and os.path.isfile(os.path.join(src, f)):
+WEIGHTS = ('.safetensors', '.bin', '.pt', '.gguf')
+for f in os.listdir(src):  # src may be a full model snapshot: never copy weight shards
+    if f not in ('config.json', 'model.safetensors.index.json') and not f.endswith(WEIGHTS) and os.path.isfile(os.path.join(src, f)):
         shutil.copyfile(os.path.join(src, f), os.path.join(out, f))
 cfg = json.load(open(os.path.join(src, 'config.json')))
 t = cfg['text_config']
@@ -26,6 +27,9 @@ t.update(num_hidden_layers=4, layer_types=['linear_attention'] * 3 + ['full_atte
          num_key_value_heads=2, head_dim=32, linear_key_head_dim=16, linear_value_head_dim=16, linear_num_key_heads=2,
          linear_num_value_heads=4, num_experts=8, num_experts_per_tok=2, moe_intermediate_size=32, shared_expert_intermediate_size=32)
 t['rope_parameters']['mrope_section'] = [2, 1, 1]          # sums to head_dim * partial_rotary_factor / 2 = 4
+# Larger init than the real 0.02: with a frozen random lm_head of width 64, logits from a 0.02 init are almost flat and
+# LoRA cannot make the model confident, which made the overfit check pass or fail by chance.
+t['initializer_range'] = 0.2
 cfg['vision_config'].update(depth=2, hidden_size=64, intermediate_size=128, num_heads=4, out_hidden_size=64)
 json.dump(cfg, open(os.path.join(out, 'config.json'), 'w'), indent=1)
 torch.manual_seed(0)

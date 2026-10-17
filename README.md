@@ -49,15 +49,70 @@ python tests/mock/overfit_check.py --config <这份配置所在的目录> --work
 | `lcam/encode.py` | 编码对话模板、图片和标签：只训练回答部分；拼接对不上或超长时直接报错，不截断 |
 | `lcam/model.py`、`lcam/targets.py` | 加载模型。LoRA 只加在两种注意力层和共享专家上，路由专家、router、视觉塔和词表都冻结。层名是从加载后的模型里按名称识别的，不写死；选中了哪些层会写进 run.json 和 forward_check 的输出，**训练前必须人工核对一遍** |
 | `lcam/parse.py` | 与基准评分器相同的答案解析规则（P1–P4） |
+| `scripts/run_pipeline.sh` | 总控脚本：在服务器上按阶段串起下面所有脚本，见下一节 |
 | `scripts/check_data.py` | 用真实 processor 核对每条样本的长度、视觉 token 数和 mask 情况（不需要权重和 GPU） |
 | `scripts/forward_check.py` | 只做前向计算并输出 loss，不更新权重；backward 显存探针需要单独授权 |
 | `scripts/train.py` | 正式训练，必须加 `--allow-optimizer-step` 才会更新权重 |
 | `scripts/infer.py` | 用 transformers 贪心解码生成答案，输出格式与基准评分器的提交格式一致 |
 | `scripts/infer_vllm.py` | 用 vLLM 推理，速度快，B0 开启推理模式时用它；关闭推理时用贪心解码，开启时按模型卡推荐的采样参数 |
 | `scripts/select_checkpoint.py` | 只根据验证集选检查点 |
-| `tests/mock/` | 缩小版模型、迷你数据包、过拟合一致性测试，用于不下载权重的冒烟测试 |
+| `tests/mock/` | 缩小版模型、迷你数据包、冒烟测试配置、过拟合一致性测试，用于不下载权重的冒烟测试 |
 
-## 服务器上的步骤
+## 服务器上一条龙：`scripts/run_pipeline.sh`
+
+先做三件准备：
+1. 把数据包 `locus-bundle-v1.7.0.tar` 传到服务器，核对 sha256 后解压到 `/data`；
+2. 克隆本仓库；
+3. 设置两个环境变量：
+
+```bash
+export BUNDLE=/data/locus-bundle WORK=/data/locus-work
+```
+
+然后按阶段运行。每个阶段的日志写在 `$WORK/logs/` 下，中断后可以重跑，已完成的推理结果和训练会保留。
+
+| 阶段 | 做什么 | 是否需要授权 |
+|---|---|---|
+| `setup` | 装依赖，下载 Qwen3.5-35B-A3B，并把实际下载到的版本号写进 `configs/common.yaml` | 否 |
+| `smoke` | 用缩小版随机模型加迷你数据包，把每个脚本都跑一遍，包括过拟合一致性测试。几分钟跑完 | 否 |
+| `check` | 用真实 processor 核对训练集和验证集的长度、视觉 token 和 mask | 否 |
+| `forward` | 用真实模型只做前向、算 loss，不更新权重 | 否 |
+| `probe` | 做一次反向，测峰值显存 | `ALLOW_BACKWARD_PROBE=1` |
+| `b0` | 未训练模型跑验证集和全部测试提示词（关闭推理），另跑一遍开启推理的 `test_V0` | 否 |
+| `train` | 训练 B1/B2：按 `$BUDGETS` 两种口径 × `$SEEDS` 各个种子 | `ALLOW_TRAIN=1` |
+| `select` | 每个检查点都跑验证集，只按验证集成功率选出最好的一个 | 否 |
+| `test` | 每个训练组用选出的检查点，把全部测试提示词跑一次 | 否 |
+| `pack` | 把答案、训练记录、选择结果和选中的适配器打成一个 tar，发回基准方打分 | 否 |
+| `all` | 依次跑 `setup smoke check forward b0`；只有设置了 `ALLOW_TRAIN=1`，才继续跑 `train select test pack` | — |
+
+例如先跑到训练之前，把结果发回来确认：
+
+```bash
+scripts/run_pipeline.sh all
+```
+
+确认没有问题、并得到训练授权后：
+
+```bash
+ALLOW_TRAIN=1 SEEDS="0 1 2" BUDGETS="primary_fixed_total secondary_matched" scripts/run_pipeline.sh train
+```
+
+```bash
+scripts/run_pipeline.sh select && scripts/run_pipeline.sh test && scripts/run_pipeline.sh pack
+```
+
+可选环境变量：
+- `ARMS`：要训练哪几组，默认 `"B1 B2"`；
+- `MICRO_BATCH`：每次前向的样本数，默认 4；
+- `WORKERS`：数据加载进程数，默认 4；
+- `ENGINE_B0`：B0 用什么推理，默认 vLLM；
+- `ENGINE_ADAPTER`：带适配器时用什么推理，默认 transformers；
+- `TP`：vLLM 张量并行的卡数；
+- `PY`：Python 解释器路径。
+
+测试集答案只在基准方的机器上打分，服务器上没有测试集的答案表。
+
+## 各脚本单独使用（`run_pipeline.sh` 就是按这个顺序调用它们）
 
 每完成一步，把输出的 json 发回来确认，再做下一步。
 

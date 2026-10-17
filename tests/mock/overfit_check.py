@@ -20,8 +20,9 @@ REPO = os.path.dirname(os.path.dirname(HERE))
 ap = argparse.ArgumentParser()
 ap.add_argument('--config', required=True)
 ap.add_argument('--work', required=True)
-ap.add_argument('--steps', type=int, default=100)
-ap.add_argument('--lr', type=float, default=5e-3)
+ap.add_argument('--steps', type=int, default=400)
+ap.add_argument('--lr', type=float, default=3e-3)
+ap.add_argument('--rank', type=int, default=32)  # enough LoRA capacity on the tiny random model to separate the two prompts reliably
 a = ap.parse_args()
 w = os.path.abspath(a.work)
 bundle = os.path.join(w, 'bundle')
@@ -29,7 +30,8 @@ os.makedirs(os.path.join(bundle, 'training_exports', 'train'), exist_ok=True)
 system = '你在一个三维白模场景里调整相机位置。只输出要求的 JSON。'
 recs = [{'id': f'overfit-{i}:action', 'root_id': f'overfit-{i}', 'pair_group_id': f'overfit-{i}', 'task_id': f'tover{i}', 'source_split': 'train',
          'images': [], 'system': system, 'prompt': p, 'target': json.dumps({'move_m': dict(zip(('right', 'up', 'back'), act))})}
-        for i, (p, act) in enumerate((('题目甲：人在柱子后面，往哪挪？', (1, 0, -2)), ('题目乙：人太小了，往哪挪？', (-2, 1, 0))))]
+        for i, (p, act) in enumerate((('题目甲：红色人物站在灰色柱子后面，被挡住了一半，相机应该往哪里挪？', (1, 0, -2)),
+                                      ('题目乙：远处走廊尽头的蓝色人物太小了，画面里几乎看不清。', (-2, 1, 0))))]
 with open(os.path.join(bundle, 'training_exports', 'train', 'action_sft.jsonl'), 'w', encoding='utf-8') as f:
     for r in recs:
         f.write(json.dumps(r, ensure_ascii=False) + '\n')
@@ -42,13 +44,14 @@ cfgdir = os.path.join(w, 'configs')
 os.makedirs(cfgdir, exist_ok=True)
 common = yaml.safe_load(open(os.path.join(a.config, 'common.yaml')))
 common['optim'].update(lr=a.lr, warmup_ratio=0.0, effective_batch_size=2)
+common['trainable'].update(lora_r=a.rank, lora_alpha=2 * a.rank)
 yaml.safe_dump(common, open(os.path.join(cfgdir, 'common.yaml'), 'w'), allow_unicode=True, sort_keys=False)
 yaml.safe_dump({'base': 'common.yaml', 'arm': 'B1', 'mix': {'action_sft': 1.0}, 'budget': {'primary_fixed_total': {'samples': 2 * a.steps}}},
                open(os.path.join(cfgdir, 'B1.yaml'), 'w'), sort_keys=False)
 run = os.path.join(w, 'run')
 py = sys.executable
 subprocess.run([py, os.path.join(REPO, 'scripts', 'train.py'), '--config', os.path.join(cfgdir, 'B1.yaml'), '--budget', 'primary_fixed_total',
-                '--seed', '0', '--bundle', bundle, '--out', run, '--micro-batch', '2', '--workers', '0', '--allow-optimizer-step'], check=True)
+                '--seed', '0', '--bundle', bundle, '--out', run, '--micro-batch', '2', '--workers', '0', '--allow-optimizer-step'], check=True)  # 2 tiny records: no loader workers needed
 ckpts = sorted(os.listdir(os.path.join(run, 'checkpoints')), key=lambda c: int(c.split('-')[1]))
 out = os.path.join(w, 'answers.jsonl')
 if os.path.exists(out):
