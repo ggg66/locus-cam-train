@@ -1,0 +1,42 @@
+# v2 training protocol (docs/v2/protocol_v2.yaml), shared by A_base / AG / A_compute. Trained with scripts/train_v2.py.
+# Kept from v1 on purpose: base weights, LoRA placement and size, optimiser, effective batch, label rule, prompts.
+protocol: v2
+model:
+  id: ${LCAM_MODEL}          # local directory of Qwen/Qwen3.5-35B-A3B at the revision below (export LCAM_MODEL=...)
+  revision: 59d61f3ce65a6d9863b86d2e96597125219dc754
+  dtype: bfloat16
+  device_map: auto           # one process per GPU; the whole model fits on one H20
+processor:
+  min_pixels: null
+  max_pixels: null
+  images_per_sample: 2       # main, overhead; checked for every training record
+chat:
+  enable_thinking: false
+data:
+  max_length: 4096           # longer = error, never truncated
+  loss_on: assistant_tokens_only
+trainable:
+  method: lora
+  lora_r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  lora_on: [attention, shared_expert]
+optim:
+  optimizer: adamw
+  lr: 1.0e-4
+  schedule: cosine
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  effective_batch_size: 64
+  seeds: [0, 1, 2]
+loss:
+  reduction: sample_mean     # per sample: mean CE over its learned tokens; per step: weighted mean over all samples of the step
+  sample_weight:             # equal weights; with AG's 3:1 exposures this is 0.75 x action mean + 0.25 x geometry mean
+    action_sft: 1.0
+    geometry_sft_v2: 1.0
+checkpoints:
+  at_fraction: [0.25, 0.5, 0.75, 1.0]   # of the planned optimizer steps, same for every run family
+  primary: 1.0                          # the pre-registered endpoint; validation-best among these four is reported separately
+evaluation:
+  decoding: greedy
+  max_new_tokens: 512

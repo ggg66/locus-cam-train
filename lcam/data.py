@@ -2,13 +2,15 @@
 
 Export records come from benchmark-v1-pretrain/training_exports/<split>/*.jsonl (see its export.py). Each record
 has `images` (paths relative to the data bundle root), `system`, `prompt`, `target`, and for geometry records
-`loss_mask_paths`. Outcome records and the privileged geometry file are never used by B1/B2.
+`loss_mask_paths`. Outcome records and the privileged geometry file are never used.
+geometry_sft_v2 (export_v2.py): fields the images cannot support carry fixed defaults instead of their true values,
+`hidden_paths` lists them and `loss_mask_paths` is empty, so every target token is learned.
 """
 import json
 import os
 import random
 
-ALLOWED = {'action_sft', 'geometry_sft'}          # B1/B2 never read outcome_records or geometry_sft_privileged
+ALLOWED = {'action_sft', 'geometry_sft', 'geometry_sft_v2'}   # never outcome_records or geometry_sft_privileged
 
 
 def read_jsonl(path):
@@ -56,6 +58,53 @@ def schedule(recs, mix, n_samples, seed):
         seq.extend((k, i) for i in pool[:n])
     rng.shuffle(seq)
     return seq, counts
+
+
+def kind_pool(n_records, n, seed, kind):
+    """n record indices of one source in reshuffled passes (no repeat inside a pass), from its own seeded stream."""
+    rng = random.Random(f'{seed}|{kind}')
+    pool = []
+    while len(pool) < n:
+        order = list(range(n_records))
+        rng.shuffle(order)
+        pool.extend(order)
+    return pool[:n]
+
+
+def schedule_v2(recs, exposures, seed, anchor='action_sft'):
+    """Sample order of one v2 run: (kind, record_index) list and exposure counts.
+    Every source draws from its own seeded stream, so the anchor (action) sequence of a seed does not depend on
+    what else is mixed in: AG's action samples are, in order, exactly A-base's, and A-compute's begin with them.
+    The other sources go to seeded positions between them."""
+    pools = {k: kind_pool(len(recs[k]), int(n), seed, k) for k, n in exposures.items()}
+    seq = [(anchor, i) for i in pools[anchor]]
+    others = [(k, i) for k in sorted(exposures) if k != anchor for i in pools[k]]
+    if others:
+        rng = random.Random(f'{seed}|mix|' + ','.join(sorted(exposures)))
+        rng.shuffle(others)
+        total = len(seq) + len(others)
+        slots = set(rng.sample(range(total), len(others)))
+        a, o = iter(seq), iter(others)
+        seq = [next(o) if j in slots else next(a) for j in range(total)]
+    return seq, {k: len(v) for k, v in pools.items()}
+
+
+def step_layout(n, eff, micro, ws):
+    """Who processes which schedule position. Optimizer step s owns positions [s*eff, (s+1)*eff) whatever the world
+    size; inside a step rank r takes every ws-th position from r and cuts them into micro-batches. So the samples of
+    every step, and hence the v2 objective, are the same on 1 GPU and on 8. The last step may be short (a rank may
+    then get no micro-batch, and contributes a zero gradient)."""
+    if eff % (micro * ws):
+        raise ValueError(f'effective batch {eff} is not a multiple of micro-batch x world size ({micro} x {ws})')
+    steps = []
+    for s0 in range(0, n, eff):
+        block = list(range(s0, min(s0 + eff, n)))
+        ranks = []
+        for r in range(ws):
+            mine = block[r::ws]
+            ranks.append([mine[i:i + micro] for i in range(0, len(mine), micro)])
+        steps.append({'members': block, 'ranks': ranks})
+    return steps
 
 
 def messages(rec):
