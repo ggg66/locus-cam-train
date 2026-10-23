@@ -2,7 +2,8 @@
 # before the first run and copy this file next to the outputs.
 model:
   id: Qwen/Qwen3.5-35B-A3B   # multimodal MoE, 35B total / 3B active (decided 2026-10-16, replaces Qwen2.5-VL-7B-Instruct)
-  revision: TBD              # commit hash of the weights actually downloaded on the server
+                             # the v1 runs (2026-10-19/20) pointed this at a local copy of these weights
+  revision: 59d61f3ce65a6d9863b86d2e96597125219dc754   # downloaded 2026-10-19 for the v1 runs (14 shards, 71.90 GB)
   dtype: bfloat16
   device_map: auto           # bf16 weights ~70 GB: one 141 GB GPU, or split over two 80 GB GPUs
 processor:
