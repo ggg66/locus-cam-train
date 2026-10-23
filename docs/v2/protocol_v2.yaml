@@ -1,0 +1,61 @@
+# Locus camera benchmark, training protocol v2 (draft until the audit gates pass; then frozen with calibration.json).
+# v1 (B0/B1/B2, 12 runs, 2026-10-19/20) stays as recorded; v2 is a separate batch and is not mixed into v1 tables.
+protocol: locus-cam-train-v2
+benchmark: locus-cam-v1.7.0          # frozen test, scorer score-v1.0.0; nothing of the test changes
+question: >
+  On top of the same action demonstrations, what does added geometry supervision change - direct action choice,
+  usable geometry, consequence judgement, re-decision after a target or layout change - and is it more than what
+  the same extra compute spent on more action training gives?
+base_model: {id: Qwen/Qwen3.5-35B-A3B, revision: 59d61f3ce65a6d9863b86d2e96597125219dc754}
+fixed_across_families:        # what does NOT change between A_base, AG and A_compute (and from v1)
+  trainable: {method: lora, r: 64, alpha: 128, dropout: 0.05, on: [attention, shared_expert]}   # 76,677,120 parameters in v1
+  frozen: [routed_experts, router, vision_tower, embeddings, lm_head]
+  optimiser: {adamw: {lr: 1.0e-4, weight_decay: 0.0}, schedule: cosine, warmup_ratio: 0.03, grad_clip: 1.0}
+  effective_batch: 64
+  label_rule: robust feasible; min L1; then lexicographic "r,u,b"
+  prompts: the frozen V0 prompt and geometry instruction (unchanged)
+  chat: {enable_thinking: false}
+  seeds: [0, 1, 2]
+run_families:
+  A_base:    {action_sft: 15000}
+  AG:        {action_sft: 15000, geometry_sft_v2: 5000}        # same action sequence as A_base for the same seed
+  A_compute: {action_sft: from_calibration}                   # padded-token match to AG; its first 15000 actions are A_base's
+runs: 9                       # 3 families x 3 seeds; B0 is the untrained model, inference only
+changes_from_v1:              # each is a protocol change, not a claimed bug fix (docs/v2/training_audit.md)
+  loss: >
+    sample_mean - per sample the mean CE over its learned tokens; per optimizer step the weighted mean over all its
+    samples on all ranks (equal weights = 0.75 action + 0.25 geometry at 3:1). v1 was a token mean per micro-batch.
+  geometry_targets: >
+    geometry_sft_v2 - fields the two images cannot support carry fixed defaults (train medians of the hidden cases:
+    person 1.70 m standing, box 2.60 m on the floor, room 4.60 m) instead of their true values; every target token
+    is learned. v1 kept the true value in the text and masked only its loss.
+  schedule: per-source seeded streams (same action sequence across families)
+  layout: optimizer step s = schedule positions [64s, 64s+64) on any number of GPUs; rank gradients summed
+  checkpoints: fixed fractions 0.25/0.5/0.75/1.0 of the planned steps; 1.0 is the primary endpoint
+gates_before_training:        # all must pass; results go to docs/v2/training_audit.md
+  - unit tests (stdlib + torch)
+  - smoke run of every v2 script on the tiny model, 1 and 2 GPUs
+  - check_data: every v2 record encodes, none over max_length, both images present
+  - batch traces: two images bound, instructions differ by task, learned text = target + <|im_end|>, no hidden truth
+  - loss audit: what v1's out.loss contained (router aux loss or not)
+  - v1 weighting audit (recorded, no pass/fail)
+  - gradient equivalence 1 GPU vs 8 GPUs on step 1 (dropout off): objective and tensor norms within 2 %, cosine >= 0.999
+  - adapter save / reload reproduces the probe losses within 2e-3
+  - trainable manifest identical across families (sha256 in run.json)
+  - calibration frozen within tolerance 0.05
+endpoints:
+  primary: checkpoint at fraction 1.0 of every run, all seeds, no exclusions
+  secondary: validation-best among the four checkpoints (validation V0, 400 roots; ties -> earlier), reported separately
+evaluation:                   # the same suite for B0 and every endpoint; inference only, scored on the benchmark machine
+  - {name: main test, prompts: test_V0, n: 600, measure: action success overall, test_id, test_geometry, test_composition}
+  - {name: geometry route, prompts: test_diagnostic_geom_predict, n: 120, measure: geometry error, predicted feasible set, fixed-solver success (hidden-defaults-v1 for missing fields)}
+  - {name: consequence panel, prompts: test_diagnostic_consequence, n: 120, measure: per-constraint accuracy, joint feasibility, choice}
+  - {name: target change, prompts: test_target_swap_V0, n: 275 tasks / 70 pairs with different feasible sets, measure: both sides right, replay of one side's answer on the other as the reference}
+  - {name: layout change, prompts: test_variants_V0, n: 240 (120 geometry, 54 with disjoint feasible sets), measure: stability and re-decision}
+  - {name: B0 example check, prompts: [dev_V0, dev_V0_placeholder], n: 200 each, model: B0 only, measure: zero-action share}
+pre_registered_hypothesis: >
+  In the consequence panel the API models fail most on target size in frame (half to two thirds of wrong choices).
+  Geometry targets carry heights and sizes, so AG is expected to judge size_ok better than A_base. Reported whatever
+  the result; not a pass condition.
+not_in_this_batch: [outcome supervision (B3), RL / DPO, larger LoRA or unfrozen vision tower, mixture sweeps, new training scenes, any test change]
+stop_rule: the batch ends after the 9 runs and the evaluation suite; no extra tuning triggered by which family wins

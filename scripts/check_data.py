@@ -5,7 +5,7 @@
 Encodes every Action-SFT and Geometry-SFT record exactly as training does and reports: total / prompt / visual /
 target / masked-target tokens, records over max_length, encoding errors (prefix mismatch, context-dependent
 tokenisation of the assistant turn, missing mask paths), and one decoded example per kind showing which target
-tokens are learned. Output: <bundle>/checks/check_data-<split>.json
+tokens are learned. Output: <bundle>/checks/check_data-<split>[-<kinds>].json
 """
 import argparse
 import json
@@ -30,10 +30,11 @@ def main():
     ap.add_argument('--bundle', required=True)
     ap.add_argument('--split', default='train')
     ap.add_argument('--limit', type=int, default=0)
+    ap.add_argument('--kinds', nargs='+', default=['action_sft', 'geometry_sft'], help='v2: action_sft geometry_sft_v2')
     a = ap.parse_args()
     cfg = C.load(a.config)
     processor = load_processor(cfg)
-    recs = load_exports(a.bundle, a.split, ['action_sft', 'geometry_sft'])
+    recs = load_exports(a.bundle, a.split, a.kinds)
     check_isolation(a.bundle, a.split, recs)
     out = {'split': a.split, 'max_length': cfg['data']['max_length'], 'processor': cfg['processor'], 'kinds': {}}
     for kind, rs in recs.items():
@@ -56,7 +57,8 @@ def main():
                               'example': example}
     out['pass'] = all(v['n_errors'] == 0 for v in out['kinds'].values())
     os.makedirs(os.path.join(a.bundle, 'checks'), exist_ok=True)
-    json.dump(out, open(os.path.join(a.bundle, 'checks', f'check_data-{a.split}.json'), 'w'), ensure_ascii=False, indent=1)
+    name = f'check_data-{a.split}' + ('' if a.kinds == ['action_sft', 'geometry_sft'] else '-' + '-'.join(a.kinds))
+    json.dump(out, open(os.path.join(a.bundle, 'checks', f'{name}.json'), 'w'), ensure_ascii=False, indent=1)
     print(json.dumps(out, ensure_ascii=False, indent=1))
 
 

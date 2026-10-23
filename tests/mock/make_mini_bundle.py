@@ -34,9 +34,14 @@ def take(rel, n, pick=None):
 for split, n in (('train', a.train), ('validation', a.val)):
     take(f'training_exports/{split}/action_sft.jsonl', n)
     take(f'training_exports/{split}/geometry_sft.jsonl', n, pick=lambda r: -len(r['loss_mask_paths']))  # prefer records with masks
+    if os.path.exists(os.path.join(a.src, f'training_exports/{split}/geometry_sft_v2.jsonl')):   # v2 add-on
+        take(f'training_exports/{split}/geometry_sft_v2.jsonl', n, pick=lambda r: -len(r['hidden_paths']))
+        shutil.copyfile(os.path.join(a.src, f'training_exports/{split}/meta_v2.json'), os.path.join(a.out, f'training_exports/{split}/meta_v2.json'))
 val = take('eval_prompts/validation_V0.jsonl', a.val)
-for name in ('test_V0', 'test_variants_V0', 'test_diagnostic_S', 'test_diagnostic_no_image', 'test_diagnostic_geom_predict'):
-    take(f'eval_prompts/{name}.jsonl', a.test)
+for name in ('test_V0', 'test_variants_V0', 'test_diagnostic_S', 'test_diagnostic_no_image', 'test_diagnostic_geom_predict',
+             'test_diagnostic_consequence', 'test_target_swap_V0', 'dev_V0', 'dev_V0_placeholder'):
+    if os.path.exists(os.path.join(a.src, f'eval_prompts/{name}.jsonl')):
+        take(f'eval_prompts/{name}.jsonl', a.test)
 os.makedirs(os.path.join(a.out, 'validation_tables'))
 index = json.load(open(os.path.join(a.src, 'validation_tables', 'index.json')))
 keep = {r['task_id']: index[r['task_id']] for r in val}
