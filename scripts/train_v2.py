@@ -1,7 +1,7 @@
 """v2 LoRA SFT: A-base / AG / A-compute (configs/v2/, docs/v2/protocol_v2.yaml). scripts/train.py stays the v1 code.
 
   torchrun --nproc-per-node 8 scripts/train_v2.py --config configs/v2/AG.yaml --seed 0 \
-      --bundle /data/locus-bundle --out runs/v2-AG-s0 --micro-batch 2 [--allow-optimizer-step]
+      --bundle /data/locus-bundle --out runs/v2-AG-s0 --micro-batch 1 [--allow-optimizer-step]
 
 What differs from v1 (each is recorded in run.json):
   schedule     lcam.data.schedule_v2: per-source seeded streams, so the action sequence of a seed is the same in
@@ -140,7 +140,7 @@ def main():
     ap.add_argument('--seed', type=int, required=True)
     ap.add_argument('--bundle', required=True)
     ap.add_argument('--out', required=True)
-    ap.add_argument('--micro-batch', type=int, default=2)
+    ap.add_argument('--micro-batch', type=int, default=1)
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--allow-optimizer-step', action='store_true')
     ap.add_argument('--max-steps', type=int, default=0, help='audit / cost measurement: stop after N optimizer steps')
@@ -165,6 +165,8 @@ def main():
         raise SystemExit('v2 trains on geometry_sft_v2 (hidden fields as defaults), not the v1 geometry_sft')
     seq, counts = schedule_v2(recs, ex, a.seed)
     o, L = cfg['optim'], cfg['loss']
+    if 'micro_batch' in o and a.micro_batch != int(o['micro_batch']):
+        raise SystemExit(f'--micro-batch {a.micro_batch} differs from optim.micro_batch {o["micro_batch"]} of {a.config}')
     eff = int(o['effective_batch_size'])
     layout = step_layout(len(seq), eff, a.micro_batch, ws)
     planned_steps = len(layout)

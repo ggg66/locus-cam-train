@@ -45,12 +45,13 @@ scripts/run_v2.sh addon unit smoke check stats audit
   - 输出 A_base 和 AG 的批次追踪。
 
 ```bash
-scripts/run_v2.sh equiv short calibrate
+scripts/run_v2.sh equiv batchcheck short calibrate
 ```
 
-- `equiv`：AG 种子 0 的第一步，分别用单卡（累积 32 次）和 8 卡（累积 4 次）算梯度，关掉 dropout，两者必须一致。
+- `equiv`：AG 种子 0 的第一步，分别用单卡（累积 64 次）和 8 卡（累积 8 次）算梯度，关掉 dropout，两者必须一致。v2 每个微批只放 1 条样本，因为带补齐时样本之间会互相影响，见审计记录第一部分第 6 条。
+- `batchcheck`：B0 在验证集上分别用批量 1 和批量 8 推理，比较答案。不一致超过 1% 时，后面的评测设置 `LCAM_INFER_BATCH=1`。
 - `short`：A_base 和 AG 各在 8 卡上跑 12 步，测每步用时；AG 保存一次适配器，再重新加载核对。
-- `calibrate`：按含补齐的 token 数，算出 A_compute 的动作次数，并列出按真实 token 数和按 GPU 时间算会差多少。这一步只打印结果，不冻结。
+- `calibrate`：按处理的 token 数算出 A_compute 的动作次数（微批 1 时没有补齐），并列出按 GPU 时间算会差多少。这一步只打印结果，不冻结。
 
 把 `work/v2/audit/` 整个目录发回基准方。逐项对照 [training_audit.md](training_audit.md) 第三部分的通过标准，全部通过后再冻结标定：
 
@@ -74,7 +75,7 @@ ALLOW_TRAIN=1 NODES=$LOCUS_ROOT/work/v2/nodes.txt scripts/run_v2.sh train
 launch/status.sh
 ```
 
-按 v1 的速度，每次训练在 8 张 H20 上约 25–40 分钟。每次训练都会在进度 25%、50%、75%、100% 处保存检查点，100% 的那个是预定终点。
+v1 每个微批 2 条样本时，每次训练在 8 张 H20 上约 25–40 分钟；v2 改成微批 1，实际用时以 `short` 测出的每步秒数为准。每次训练都会在进度 25%、50%、75%、100% 处保存检查点，100% 的那个是预定终点。
 
 ## 四、评测与打包
 

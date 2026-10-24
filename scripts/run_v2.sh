@@ -10,6 +10,7 @@
 #   stats      per-record token counts (encode_stats.py), input of calibrate and audit
 #   audit      v1 loss weighting (no GPU), v1 loss on the real model (1 GPU), batch traces of A_base and AG
 #   equiv      first-step gradients of AG s0 on 1 GPU and on 8 GPUs (dropout off) must agree
+#   batchcheck B0 on validation V0 with inference batch 1 and batch 8: if answers differ, evaluate with batch 1
 #   short      12-step cost runs of A_base and AG on 8 GPUs (+ adapter save) and the reload check
 #   calibrate  A-compute budget from padded tokens; prints the result, does not freeze
 #   freeze     the same, frozen into configs/v2/calibration.json (commit that file before training)
@@ -63,7 +64,7 @@ for stage in "$@"; do
       "$PY" tests/mock/make_mini_bundle.py "$BUNDLE" "$S/mini-bundle"
       "$PY" tests/mock/make_smoke_config.py "$S/tiny-model" "$S/configs"
       B=$S/mini-bundle; C=$S/configs/v2
-      T=(--bundle "$B" --micro-batch 2 --workers 0 --allow-optimizer-step)
+      T=(--bundle "$B" --micro-batch "${MICRO_BATCH:-1}" --workers 0 --allow-optimizer-step)
       "$PY" scripts/check_data.py --config "$C/common.yaml" --bundle "$B" --kinds action_sft geometry_sft_v2 > "$S/check.json"
       "$PY" scripts/encode_stats.py --config "$C/common.yaml" --bundle "$B" --kinds action_sft geometry_sft geometry_sft_v2 --out "$S/stats.json" --workers 2
       "$PY" scripts/trace_batch.py --config "$C/AG.yaml" --seed 0 --bundle "$B" --out "$S/trace"
@@ -73,7 +74,7 @@ for stage in "$@"; do
         --out "$S/g2" "${T[@]}" --max-steps 1 --disable-dropout --dump-first-grad "$S/g2.pt"
       "$PY" scripts/compare_grads.py "$S/g1.pt" "$S/g2.pt"
       for f in A_base AG; do CUDA_VISIBLE_DEVICES=0 "$PY" scripts/train_v2.py --config "$C/$f.yaml" --seed 0 --out "$S/runs/$f" "${T[@]}"; done
-      "$PY" scripts/calibrate_compute.py --stats "$S/stats.json" --micro-batch 2 --world-size 1 --config-dir "$C" --freeze
+      "$PY" scripts/calibrate_compute.py --stats "$S/stats.json" --micro-batch "${MICRO_BATCH:-1}" --world-size 1 --config-dir "$C" --freeze
       CUDA_VISIBLE_DEVICES=0 "$PY" scripts/train_v2.py --config "$C/A_compute.yaml" --seed 0 --out "$S/runs/A_compute" "${T[@]}"
       last=$(ls -d "$S/runs/AG/checkpoints"/ckpt-* | sort -t- -k2 -n | tail -1)
       CUDA_VISIBLE_DEVICES=0 "$PY" scripts/reload_check.py --config "$C/common.yaml" --bundle "$B" --ckpt "$last"
@@ -99,16 +100,23 @@ for stage in "$@"; do
       for f in A_base AG; do "$PY" scripts/trace_batch.py --config configs/v2/$f.yaml --seed 0 --bundle "$BUNDLE" --out "$A/batch_trace"; done ;;
     equiv)
       CUDA_VISIBLE_DEVICES=0 "$PY" scripts/train_v2.py --config configs/v2/AG.yaml --seed 0 --bundle "$BUNDLE" --out "$A/equiv-1gpu" \
-        --micro-batch 2 --allow-optimizer-step --max-steps 1 --disable-dropout --dump-first-grad "$A/grad-1gpu.pt"
+        --micro-batch "${MICRO_BATCH:-1}" --allow-optimizer-step --max-steps 1 --disable-dropout --dump-first-grad "$A/grad-1gpu.pt"
       OUT=$A/equiv-8gpu launch/launch_run_v2.sh configs/v2/AG.yaml 0 29610 --max-steps 1 --disable-dropout --dump-first-grad "$A/grad-8gpu.pt"
       "$PY" scripts/compare_grads.py "$A/grad-1gpu.pt" "$A/grad-8gpu.pt" | tee "$A/equiv.json" ;;
+    batchcheck)
+      for b in 1 8; do
+        CUDA_VISIBLE_DEVICES=$((b == 1 ? 0 : 1)) "$PY" scripts/infer.py --config configs/v2/common.yaml --bundle "$BUNDLE" \
+          --prompts eval_prompts/validation_V0.jsonl --out "$A/batch$b.jsonl" --batch $b > "$A/batch$b.log" 2>&1 &
+      done
+      wait
+      "$PY" scripts/compare_outputs.py "$A/batch1.jsonl" "$A/batch8.jsonl" | tee "$A/batchcheck.json" || echo 'answers depend on batching: set LCAM_INFER_BATCH=1 for val/test' ;;
     short)
       OUT=$A/short-A_base launch/launch_run_v2.sh configs/v2/A_base.yaml 0 29611 --max-steps 12
       OUT=$A/short-AG launch/launch_run_v2.sh configs/v2/AG.yaml 0 29612 --max-steps 12 --save-at-end
       CUDA_VISIBLE_DEVICES=0 "$PY" scripts/reload_check.py --config configs/v2/common.yaml --bundle "$BUNDLE" --ckpt "$A/short-AG/checkpoints/ckpt-1" | tee "$A/reload_check.json" ;;
     calibrate|freeze)
       extra=(); [ "$stage" = freeze ] && extra=(--freeze)
-      "$PY" scripts/calibrate_compute.py --stats "$A/encode_stats-train.json" --micro-batch "${MICRO_BATCH:-2}" --world-size 8 \
+      "$PY" scripts/calibrate_compute.py --stats "$A/encode_stats-train.json" --micro-batch "${MICRO_BATCH:-1}" --world-size 8 \
         --gpu-seconds "A_base=$A/short-A_base/metrics.jsonl" "AG=$A/short-AG/metrics.jsonl" "${extra[@]}"
       cp configs/v2/calibration.json "$A/calibration.json"
       [ "$stage" = freeze ] && "$PY" scripts/trace_batch.py --config configs/v2/A_compute.yaml --seed 0 --bundle "$BUNDLE" --out "$A/batch_trace" ;;

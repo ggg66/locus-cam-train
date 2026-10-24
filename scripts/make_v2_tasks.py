@@ -11,7 +11,8 @@ test     the evaluation suite on the pre-registered endpoint (the checkpoint at 
          (no adapter, thinking off); plus the B0 dev diagnostic of the zero-action example in the V0 prompt.
 valbest  the same suite on each run's validation-best checkpoint, for runs where it is not the endpoint
          (needs <run>/selection.json from scripts/select_checkpoint.py).
-Task line (launch/run_infer_pool.sh): out<TAB>prompts<TAB>adapter|-<TAB>thinking<TAB>batch<TAB>max_new_tokens.
+Task line (launch/run_infer_pool.sh): out<TAB>prompts<TAB>adapter|-<TAB>thinking<TAB>batch<TAB>max_new_tokens; batch is
+$LCAM_INFER_BATCH (default 8; set 1 if scripts/run_v2.sh batchcheck finds answers that depend on batching).
 """
 import argparse
 import json
@@ -45,7 +46,8 @@ def endpoint_ckpt():
     return f'ckpt-{fr.index(float(common()["checkpoints"]["primary"])) + 1}'
 
 
-def line(out, prompts, adapter, maxnew, batch=8):
+def line(out, prompts, adapter, maxnew, batch=None):
+    batch = batch or int(os.environ.get('LCAM_INFER_BATCH', 8))   # 1 when the batchcheck stage finds batch-dependent answers
     return '\t'.join([out, f'eval_prompts/{prompts}.jsonl', adapter, '0', str(batch), str(maxnew)])
 
 

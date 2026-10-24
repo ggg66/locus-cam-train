@@ -52,6 +52,7 @@ class TrainV2Mock(unittest.TestCase):
         self.dir = self.tmp.name
         common = yaml.safe_load(open(os.path.join(ROOT, 'configs', 'v2', 'common.yaml')))
         common['optim'].update(effective_batch_size=4, lr=0.01, warmup_ratio=0.5)   # 3 steps for AG, the first at lr 0
+        common['optim'].pop('micro_batch')            # the fake model has no batch interaction; several micro-batch sizes are tested
         self.cdir = os.path.join(self.dir, 'cfg')
         os.makedirs(self.cdir)
         yaml.safe_dump(common, open(os.path.join(self.cdir, 'common.yaml'), 'w'))
@@ -165,3 +166,26 @@ class TrainV2Mock(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+@unittest.skipUnless(HAVE, 'torch, PyYAML and Pillow needed')
+class MicroBatchPinned(unittest.TestCase):
+    def test_config_micro_batch_is_enforced(self):
+        import yaml
+        fake_hf_modules()
+        import train_v2 as T
+        with tempfile.TemporaryDirectory() as d:
+            c = yaml.safe_load(open(os.path.join(ROOT, 'configs', 'v2', 'common.yaml')))
+            self.assertEqual(c['optim']['micro_batch'], 1)
+            yaml.safe_dump(c, open(os.path.join(d, 'common.yaml'), 'w'))
+            yaml.safe_dump({'base': 'common.yaml', 'run_family': 'A_base', 'exposures': {'action_sft': 8}}, open(os.path.join(d, 'A_base.yaml'), 'w'))
+            T.load_exports = lambda b, s, ks: {k: [{'id': f'{k}{i}', 'images': ['a', 'b'], 'root_id': str(i), 'task_id': str(i),
+                                                   'pair_group_id': str(i), 'source_split': s} for i in range(10)] for k in ks}
+            T.check_isolation = lambda *x: None
+            argv = sys.argv
+            sys.argv = ['train_v2.py', '--config', os.path.join(d, 'A_base.yaml'), '--seed', '0', '--bundle', d, '--out', os.path.join(d, 'o'), '--micro-batch', '2']
+            try:
+                with self.assertRaises(SystemExit):
+                    T.main()
+            finally:
+                sys.argv = argv

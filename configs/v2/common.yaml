@@ -28,6 +28,7 @@ optim:
   warmup_ratio: 0.03
   weight_decay: 0.0
   effective_batch_size: 64
+  micro_batch: 1             # one sample per forward pass: with padding, a sample's loss changed with its batch-mate (audit, 2026-10-24)
   seeds: [0, 1, 2]
 loss:
   reduction: sample_mean     # per sample: mean CE over its learned tokens; per step: weighted mean over all samples of the step

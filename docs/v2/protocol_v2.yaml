@@ -12,6 +12,7 @@ fixed_across_families:        # what does NOT change between A_base, AG and A_co
   frozen: [routed_experts, router, vision_tower, embeddings, lm_head]
   optimiser: {adamw: {lr: 1.0e-4, weight_decay: 0.0}, schedule: cosine, warmup_ratio: 0.03, grad_clip: 1.0}
   effective_batch: 64
+  micro_batch: 1              # see changes_from_v1.batching
   label_rule: robust feasible; min L1; then lexicographic "r,u,b"
   prompts: the frozen V0 prompt and geometry instruction (unchanged)
   chat: {enable_thinking: false}
@@ -32,6 +33,14 @@ changes_from_v1:              # each is a protocol change, not a claimed bug fix
   schedule: per-source seeded streams (same action sequence across families)
   layout: optimizer step s = schedule positions [64s, 64s+64) on any number of GPUs; rank gradients summed
   checkpoints: fixed fractions 0.25/0.5/0.75/1.0 of the planned steps; 1.0 is the primary endpoint
+  batching: >
+    one sample per forward pass (accumulation 8 on 8 GPUs). The server audit (2026-10-24) found that with padding a
+    sample's loss changes with its batch-mate (padded short sample 4.7 % on average, unpadded long sample 3 %, at most
+    16.9 %; equal lengths: identical to a single forward). v1 trained with pairs, and in a mixed run action samples are
+    often padded to a geometry sample's length, so this would differ systematically between A_base and AG.
+  inference_batch: >
+    the batchcheck gate compares B0 on validation V0 with batch 1 and batch 8; if parsed answers differ for more than
+    1 % of prompts, all v2 evaluation runs with batch 1 (v1 answers were made with batch 8).
 gates_before_training:        # all must pass; results go to docs/v2/training_audit.md
   - unit tests (stdlib + torch)
   - smoke run of every v2 script on the tiny model, 1 and 2 GPUs
@@ -39,7 +48,9 @@ gates_before_training:        # all must pass; results go to docs/v2/training_au
   - batch traces: two images bound, instructions differ by task, learned text = target + <|im_end|>, no hidden truth
   - loss audit: what v1's out.loss contained (router aux loss or not)
   - v1 weighting audit (recorded, no pass/fail)
-  - gradient equivalence 1 GPU vs 8 GPUs on step 1 (dropout off): objective and tensor norms within 2 %, cosine >= 0.999
+  - gradient equivalence 1 GPU (accumulation 64) vs 8 GPUs (accumulation 8) on step 1, micro-batch 1, dropout off:
+    objective and tensor norms within 2 %, cosine >= 0.999
+  - inference batch check: B0 validation V0, batch 1 vs batch 8 (decides the evaluation batch size; no pass/fail)
   - adapter save / reload reproduces the probe losses within 2e-3
   - trainable manifest identical across families (sha256 in run.json)
   - calibration frozen within tolerance 0.05
