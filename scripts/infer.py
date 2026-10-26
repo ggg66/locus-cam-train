@@ -8,11 +8,13 @@ Each output line: {"task_id", "sample", "condition", "split", "raw", "infra_erro
 submission format of the benchmark scorer. Test answers are scored on the benchmark machine (no test labels
 here); validation answers can be scored here with scripts/select_checkpoint.py. Decoding is greedy, so repeated
 samples of the same prompt are identical; that is recorded, not counted as independent samples.
+Each line also records `seconds`: wall time of its generate() call (with --batch 1, the time of that one answer).
 """
 import argparse
 import json
 import os
 import sys
+import time
 
 import torch
 
@@ -58,8 +60,10 @@ def main():
                 texts.append(prompt_text(processor, msgs, enable_thinking=a.thinking))
                 images.extend(load_images(a.bundle, it))
             enc = processor(text=texts, images=images or None, return_tensors='pt', padding=True).to(next(model.parameters()).device)
+            t0 = time.time()
             with torch.no_grad():
                 gen = model.generate(**enc, max_new_tokens=max_new, do_sample=False, eos_token_id=stop_ids, pad_token_id=processor.tokenizer.pad_token_id)
+            seconds = round(time.time() - t0, 3)
             new = gen[:, enc['input_ids'].shape[1]:]
             for it, row in zip(chunk, new):
                 ids = row.tolist()
@@ -67,7 +71,7 @@ def main():
                 f.write(json.dumps({'task_id': it['task_id'], 'sample': it['sample'], 'condition': it['condition'], 'split': it['split'],
                                     'raw': processor.tokenizer.decode(row, skip_special_tokens=True), 'infra_error': None, 'new_tokens': n,
                                     'finish': 'stop' if any(t in stop_ids for t in ids) else 'length',
-                                    'adapter': a.adapter, 'decoding': 'greedy', 'thinking': a.thinking}, ensure_ascii=False) + '\n')
+                                    'adapter': a.adapter, 'decoding': 'greedy', 'thinking': a.thinking, 'seconds': seconds, 'batch_size': len(chunk)}, ensure_ascii=False) + '\n')
             f.flush()
             print(f'{min(i + a.batch, len(todo))}/{len(todo)}', flush=True)
 
