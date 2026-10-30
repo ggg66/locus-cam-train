@@ -2,11 +2,12 @@
 
   pip install openai anthropic google-genai
   OPENAI_API_KEY=.. GEMINI_API_KEY=.. ANTHROPIC_API_KEY=.. python scripts/run_api_models.py \
-      --bundle $BUNDLE --out $LOCUS_ROOT/work/api [--models gpt-6-astra,gemini-4-argon,claude-fable-5-1] \
+      --bundle $BUNDLE --out $LOCUS_ROOT/work/api [--models gpt-5.6-sol,gemini-3.1-pro-preview,claude-opus-5-5] \
       [--prompts test_V0] [--concurrency 8] [--plan]
 
 Prompts are the bundle's eval_prompts/<name>.jsonl, byte for byte the text, system prompt and image order that the
-four API models of the main table received (checked on test_V0 and test_diagnostic_S). One independent request per
+four API models of the main table received (checked on test_V0 and test_diagnostic_S). Default models: one tier below each
+provider's newest flagship (GPT-5.6 Sol, Gemini 3.1 Pro, Claude Opus 5.5); the flagships are listed in MODELS too. One independent request per
 prompt; provider-default sampling; no prefill, no tools, no few-shot. Settings per model (MODELS below):
   - output budget: each API's large output limit, so that answers are not cut by the budget;
   - reasoning effort: the provider default unless --effort is given (recorded in every answer);
@@ -33,12 +34,14 @@ import time
 MODELS = {
     'gpt-6-astra': ('openai', 128000, (10.0, 50.0)),
     'gpt-6.1-sol': ('openai', 128000, (2.0, 10.0)),
-    'gemini-4-argon': ('google', 65536, (2.0, 10.0)),      # price through 2026-11-30 per third-party listings; check the rate card
+    'gpt-5.6-sol': ('openai', 128000, (4.0, 20.0)),          # promotional price at least through 2026-11-21
+    'gemini-4-argon': ('google', 65536, (2.0, 10.0)),      # through 2026-11-30, then 4 / 20 (Gemini API pricing page)
     'gemini-3.8-flash': ('google', 65536, (0.75, 3.75)),
+    'gemini-3.1-pro-preview': ('google', 65536, (2.0, 12.0)),  # prompts up to 200k tokens; preview model
     'claude-fable-5-1': ('anthropic', 128000, (10.0, 50.0)),
     'claude-opus-5-5': ('anthropic', 128000, (4.0, 20.0)),
 }
-DEFAULT_MODELS = 'gpt-6-astra,gemini-4-argon,claude-fable-5-1'
+DEFAULT_MODELS = 'gpt-5.6-sol,gemini-3.1-pro-preview,claude-opus-5-5'   # one tier below each provider's newest flagship
 EST_IN, EST_OUT = 2000, 12000      # tokens per request for --plan (the four reasoning models of the main table: 1.1-1.6k in, 6.5-17k out)
 BILLING_WORDS = ('insufficient_quota', 'credit balance', 'billing', 'payment', 'exceeded your current quota')
 RATE_WORDS = ('rate limit', 'rate_limit', 'ratelimit', '429', 'resource_exhausted', 'too many requests', 'overloaded', '529')
