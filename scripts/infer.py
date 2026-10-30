@@ -47,9 +47,12 @@ def main():
     if os.path.exists(a.out):
         done = {(json.loads(l)['task_id'], json.loads(l)['sample'], json.loads(l)['condition']) for l in open(a.out)}
     todo = [it for it in items if (it['task_id'], it['sample'], it['condition']) not in done]
-    # stop explicitly at <|im_end|> (the end of an assistant turn) instead of relying on the checkpoint's generation_config
+    # stop explicitly at the token that closes an assistant turn (config chat.end_of_turn: <|im_end|> for Qwen3.5,
+    # <turn|> for Gemma 4) instead of relying on the checkpoint's generation_config
     tok = processor.tokenizer
-    stop_ids = sorted({tok.convert_tokens_to_ids('<|im_end|>'), tok.eos_token_id} - {None})
+    stop_ids = sorted({tok.convert_tokens_to_ids(processor.lcam_end_of_turn), tok.eos_token_id} - {None})
+    # Qwen3.5 takes the images of a batch as one flat list; Gemma 4 wants one list per prompt (config processor.images_per_prompt_list)
+    nested = bool((cfg.get('processor') or {}).get('images_per_prompt_list'))
     with open(a.out, 'a', encoding='utf-8') as f:
         for i in range(0, len(todo), a.batch):
             chunk = todo[i:i + a.batch]
@@ -58,8 +61,12 @@ def main():
                 user = [{'type': 'image', 'image': p} for p in it['images']] + [{'type': 'text', 'text': it['prompt']}]
                 msgs = [{'role': 'system', 'content': [{'type': 'text', 'text': it['system']}]}, {'role': 'user', 'content': user}]
                 texts.append(prompt_text(processor, msgs, enable_thinking=a.thinking))
-                images.extend(load_images(a.bundle, it))
-            enc = processor(text=texts, images=images or None, return_tensors='pt', padding=True).to(next(model.parameters()).device)
+                if nested:
+                    images.append(load_images(a.bundle, it))
+                else:
+                    images.extend(load_images(a.bundle, it))
+            has_images = any(images) if nested else bool(images)
+            enc = processor(text=texts, images=images if has_images else None, return_tensors='pt', padding=True).to(next(model.parameters()).device)
             t0 = time.time()
             with torch.no_grad():
                 gen = model.generate(**enc, max_new_tokens=max_new, do_sample=False, eos_token_id=stop_ids, pad_token_id=processor.tokenizer.pad_token_id)

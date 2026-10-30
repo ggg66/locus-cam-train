@@ -24,8 +24,9 @@ sys.path.insert(0, HERE)
 from lcam import config as C  # noqa: E402
 
 FAMILIES = ['A_base', 'AG', 'A_compute']
-RUNS = 'work/runs/v2'
-OUTS = 'work/outputs/v2'
+ROUND = os.environ.get('LCAM_ROUND', 'v2')   # v3_gemma: the same suite on the Gemma 4 runs
+RUNS = f'work/runs/{ROUND}'
+OUTS = f'work/outputs/{ROUND}'
 SUITE = [  # prompt file (bundle eval_prompts/), max new tokens
     ('test_V0', 512), ('test_variants_V0', 512), ('test_target_swap_V0', 512),
     ('test_diagnostic_geom_predict', 1024), ('test_diagnostic_consequence', 2048)]
@@ -33,7 +34,7 @@ B0_ONLY = [('dev_V0', 512), ('dev_V0_placeholder', 512)]
 
 
 def common():
-    return C.load(os.path.join(HERE, 'configs', 'v2', 'common.yaml'))
+    return C.load(os.path.join(HERE, 'configs', ROUND, 'common.yaml'))
 
 
 def runs():
@@ -61,7 +62,7 @@ def main():
     if a.what == 'train':
         nodes = [x.split()[0] for x in open(a.nodes) if x.strip() and not x.startswith('#')]
         for i, (f, s, _) in enumerate(runs()):
-            out.append(f'{nodes[i % len(nodes)]} configs/v2/{f}.yaml {s}')
+            out.append(f'{nodes[i % len(nodes)]} configs/{ROUND}/{f}.yaml {s}')
     elif a.what == 'val':
         n = len(common()['checkpoints']['at_fraction'])
         for _, _, tag in runs():

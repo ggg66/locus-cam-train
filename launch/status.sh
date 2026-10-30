@@ -1,10 +1,10 @@
 #!/bin/bash
-# Progress of every v2 run: last step, objective, per-kind loss, speed, ETA, checkpoints.
+# Progress of every run of the round $LCAM_ROUND (default v2): last step, objective, per-kind loss, speed, ETA, checkpoints.
 source "$(dirname "$0")/env.sh"
-"$PY" - "$LOCUS_ROOT" <<'PYEOF'
+"$PY" - "$LOCUS_ROOT" "$LCAM_ROUND" <<'PYEOF'
 import glob, json, os, sys, time
-root = sys.argv[1]
-for rj in sorted(glob.glob(os.path.join(root, 'work/runs/v2/*/run.json'))):
+root, rnd = sys.argv[1], sys.argv[2]
+for rj in sorted(glob.glob(os.path.join(root, 'work', 'runs', rnd, '*', 'run.json'))):
     d = os.path.dirname(rj); tag = os.path.basename(d)
     try:
         r = json.load(open(rj))

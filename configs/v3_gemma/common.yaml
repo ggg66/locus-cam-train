@@ -1,0 +1,48 @@
+# v3_gemma: the v2 protocol (docs/v2/protocol_v2.yaml) on a second base model, Gemma 4 31B (docs/v3_gemma/README.md).
+# Changed from configs/v2/common.yaml: the model, the end-of-turn token of its chat template, and LoRA on the dense MLP
+# instead of the MoE shared expert. Everything else (data, exposures, optimiser, batch, loss, checkpoints, decoding)
+# is the v2 setting, so the two base models are compared under one protocol.
+protocol: v2
+round: v3_gemma
+model:
+  id: ${LCAM_MODEL}          # local directory of google/gemma-4-31B-it at the revision below (export LCAM_MODEL=...)
+  revision: 842da3794eaa0b77d5f08bae87a17459d91ff475   # Hugging Face main on 2026-10-30
+  dtype: bfloat16
+  device_map: auto           # one process per GPU; 31B bf16 (~62 GB) fits on one H20, peak memory is checked by the audit
+processor:
+  min_pixels: null
+  max_pixels: null
+  images_per_sample: 2       # main, overhead; checked for every training record
+  images_per_prompt_list: true   # batched inference: the Gemma 4 processor wants one image list per prompt
+chat:
+  enable_thinking: false     # the template then opens an empty thought channel, as Qwen's empty think block
+  end_of_turn: <turn|>       # closes an assistant turn in the Gemma 4 template (id 106); learned after the target
+data:
+  max_length: 4096           # longer = error, never truncated
+  loss_on: assistant_tokens_only
+trainable:
+  method: lora
+  lora_r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  lora_on: [attention, mlp]  # dense counterpart of v2's attention + shared expert; vision tower, projector, embeddings frozen
+optim:
+  optimizer: adamw
+  lr: 1.0e-4
+  schedule: cosine
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  effective_batch_size: 64
+  micro_batch: 1             # one sample per forward pass: with padding, a sample's loss changed with its batch-mate (audit, 2026-10-24)
+  seeds: [0, 1, 2]
+loss:
+  reduction: sample_mean     # per sample: mean CE over its learned tokens; per step: weighted mean over all samples of the step
+  sample_weight:             # equal weights; with AG's 3:1 exposures this is 0.75 x action mean + 0.25 x geometry mean
+    action_sft: 1.0
+    geometry_sft_v2: 1.0
+checkpoints:
+  at_fraction: [0.25, 0.5, 0.75, 1.0]   # of the planned optimizer steps, same for every run family
+  primary: 1.0                          # the pre-registered endpoint; validation-best among these four is reported separately
+evaluation:
+  decoding: greedy
+  max_new_tokens: 512

@@ -15,6 +15,8 @@ def classify(name):
         return 'routed_expert'
     if re.search(r'mlp\.(gate|router)$', n):
         return 'router'
+    if re.search(r'\.mlp\.(gate_proj|up_proj|down_proj)(\.|$)', n):   # module, or its LoRA / weight parameters
+        return 'mlp'           # dense feed-forward (Gemma 4); an MoE's shared expert and experts are matched above
     if 'self_attn' in n or 'linear_attn' in n or 'attention' in n:
         return 'attention'
     return 'other'

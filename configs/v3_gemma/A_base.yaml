@@ -1,0 +1,5 @@
+# A-base: action supervision only, 15000 action exposures (~3 passes over the 5053 train roots).
+base: common.yaml
+run_family: A_base
+exposures:
+  action_sft: 15000

@@ -1,0 +1,11 @@
+# A-compute: action supervision only, with the training compute of AG. The number of action exposures is measured by
+# scripts/calibrate_compute.py (padded tokens processed, same micro-batch and world size) and frozen in
+# calibration.json before any v2 run; its first 15000 actions are A-base's.
+base: common.yaml
+run_family: A_compute
+exposures:
+  action_sft: from_calibration
+calibration:
+  match: AG
+  metric: padded_tokens
+  tolerance: 0.05

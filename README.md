@@ -1,5 +1,7 @@
 # locus-cam-train
 
+> **v3_gemma（第二个底座 Gemma 4 31B，同一套 v2 协议）**：操作说明见 [docs/v3_gemma/README.md](docs/v3_gemma/README.md)，设置 `LCAM_ROUND=v3_gemma` 后沿用 v2 的脚本，配置在 `configs/v3_gemma/`。不设置时一切照旧是 v2。
+>
 > **v2 训练批次（A_base / AG / A_compute，各 3 个种子）**：操作说明见 [docs/v2/README.md](docs/v2/README.md)，用 `scripts/train_v2.py`、`configs/v2/` 和 `scripts/run_v2.sh`。下文描述的是 v1（B0/B1/B2，2026-10-19/20 已跑完），v1 代码保持原样，不再修改。
 
 这是 Locus 相机平移基准（协议 `locus-cam-v1.7.0`）的训练代码。模型是 **Qwen3.5-35B-A3B**：一个多模态 MoE，总参数 35B，每个 token 激活 3B，由 30 层 Gated DeltaNet 和 10 层全注意力交替组成，每层后面接 256 个专家（每次用 8 个，另加 1 个共享专家）。这个选择定于 2026-10-16，替换原先的 Qwen2.5-VL-7B。实验分三组：

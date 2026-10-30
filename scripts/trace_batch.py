@@ -5,9 +5,10 @@
 Processor only (no weights, no GPU). For the first --n schedule positions of every kind it writes
 <out>/<run_family>-s<seed>-<pos>.json with: messages, the templated text, input_ids, labels, the learned text
 decoded, image paths + sha256 + image_grid_thw + image placeholder tokens in the sequence, and these checks:
-  two_images        two images per record and as many image placeholder tokens as the grid says
+  two_images        two images per record and as many image placeholder tokens as the processor's image tensors say
   instruction       geometry prompts carry the geometry instruction, action prompts do not
-  learned_tail      the learned tokens are the target text followed by <|im_end|>, and nothing of the prompt
+  learned_tail      the learned tokens are the target text followed by the end-of-turn token (config chat.end_of_turn),
+                    and nothing of the prompt
   no_hidden_truth   geometry_sft_v2: the target holds the frozen defaults at every hidden path (training_exports
                     meta_v2.json priors), so no true hidden value is in the teacher-forced prefix
 Writes <out>/summary.json; exit code 1 when a check fails.
@@ -21,7 +22,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lcam import config as C  # noqa: E402
 from lcam.data import load_exports, messages, schedule_v2  # noqa: E402
-from lcam.encode import END, IGNORE, encode, prompt_text  # noqa: E402
+from lcam.encode import IGNORE, encode, prompt_text  # noqa: E402
 from lcam.model import load_processor  # noqa: E402
 
 GEOM_MARK = '请不要给出动作。请根据图像估计场景几何'
@@ -62,7 +63,7 @@ def main():
     tok = processor.tokenizer
     img_tok = getattr(processor, 'image_token', '<|image_pad|>')
     img_id = tok.convert_tokens_to_ids(img_tok)
-    merge = getattr(processor.image_processor, 'merge_size', 2)
+    end = processor.lcam_end_of_turn
     priors = None
     meta = os.path.join(a.bundle, 'training_exports', 'train', 'meta_v2.json')
     if os.path.exists(meta):
@@ -81,10 +82,9 @@ def main():
         ids, labels = e['input_ids'].tolist(), e['labels'].tolist()
         learned = tok.decode([t for t, l in zip(ids, labels) if l != IGNORE])
         grid = e['image_grid_thw']
-        n_expected = int((grid.prod(dim=1) // (merge * merge)).sum()) if grid is not None else 0
-        checks = {'two_images': len(rec['images']) == 2 and grid is not None and grid.shape[0] == 2 and ids.count(img_id) == n_expected,
+        checks = {'two_images': len(rec['images']) == 2 and e['stats']['images'] == 2 and ids.count(img_id) == e['stats']['visual_tokens'] > 0,
                   'instruction': (GEOM_MARK in rec['prompt']) == k.startswith('geometry'),
-                  'learned_tail': learned == rec['target'] + END}
+                  'learned_tail': learned == rec['target'] + end}
         if k == 'geometry_sft_v2':
             t = json.loads(rec['target'])
             checks['no_hidden_truth'] = priors is not None and not rec.get('loss_mask_paths') and all(

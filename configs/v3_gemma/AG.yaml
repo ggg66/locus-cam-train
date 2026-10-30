@@ -1,0 +1,6 @@
+# AG: the same 15000 action exposures as A-base (same sequence for the same seed) plus 5000 Geometry-SFT v2 exposures.
+base: common.yaml
+run_family: AG
+exposures:
+  action_sft: 15000
+  geometry_sft_v2: 5000

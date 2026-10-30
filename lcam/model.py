@@ -1,10 +1,15 @@
-"""Model and processor loading for Qwen3.5-35B-A3B (multimodal MoE: 40 layers = 30 Gated DeltaNet + 10 gated
-full-attention layers, each followed by an MoE block with 256 routed experts, 8 active + 1 shared expert).
+"""Model and processor loading.
 
-LoRA placement (configs/common.yaml `trainable.lora_on`): the linear layers of both attention kinds and of the
-shared expert. Routed experts, the router, embeddings, lm_head and the whole vision tower stay frozen. Module
-names are discovered from the loaded model, not hard-coded, and the chosen list is written to run.json so it can
-be checked before any training.
+v1/v2: Qwen3.5-35B-A3B (multimodal MoE: 40 layers = 30 Gated DeltaNet + 10 gated full-attention layers, each followed
+by an MoE block with 256 routed experts, 8 active + 1 shared expert). LoRA on the linear layers of both attention
+kinds and of the shared expert.
+v3_gemma: Gemma 4 31B (dense, 60 layers of sliding / global attention, each followed by a dense MLP). LoRA on the
+attention and MLP projections, the dense counterpart of "attention + shared expert".
+In every round the router, routed experts, embeddings, lm_head, the multimodal projector and the whole vision tower
+stay frozen. Module names are discovered from the loaded model (lcam/targets.py), not hard-coded, and the chosen list
+is written to run.json so it can be checked before any training.
+The chat-template token that closes an assistant turn comes from the config (`chat.end_of_turn`, default
+<|im_end|> = Qwen) and is attached to the processor as `lcam_end_of_turn`, so encoding and inference use the same one.
 """
 import torch
 
@@ -18,7 +23,9 @@ def load_processor(cfg):
     if p.get('min_pixels') or p.get('max_pixels'):
         kw = {'size': {'shortest_edge': p['min_pixels'], 'longest_edge': p['max_pixels']}}
     import os
-    return AutoProcessor.from_pretrained(m['id'], revision=None if os.path.isdir(m['id']) else m['revision'], **kw)
+    proc = AutoProcessor.from_pretrained(m['id'], revision=None if os.path.isdir(m['id']) else m['revision'], **kw)
+    proc.lcam_end_of_turn = (cfg.get('chat') or {}).get('end_of_turn', '<|im_end|>')
+    return proc
 
 
 def _model_class():
@@ -26,7 +33,7 @@ def _model_class():
     for name in ('AutoModelForMultimodalLM', 'AutoModelForImageTextToText'):
         if hasattr(transformers, name):
             return getattr(transformers, name)
-    raise SystemExit('this transformers version has no multimodal auto class; install a version that supports qwen3_5_moe')
+    raise SystemExit('this transformers version has no multimodal auto class; install a version that supports the configured model')
 
 
 def lora_targets(model, lora_on, rank):
@@ -51,7 +58,8 @@ def load_model(cfg, adapter=None, for_training=False):
     local = os.path.isdir(m['id'])
     if not local and m.get('revision') in (None, 'TBD'):
         raise SystemExit('pin model.revision in configs/common.yaml to the downloaded commit hash first')
-    model = _model_class().from_pretrained(m['id'], revision=None if local else m['revision'], dtype=torch.bfloat16, device_map=m.get('device_map', 'auto'))
+    kw = {'attn_implementation': m['attn_implementation']} if m.get('attn_implementation') else {}
+    model = _model_class().from_pretrained(m['id'], revision=None if local else m['revision'], dtype=torch.bfloat16, device_map=m.get('device_map', 'auto'), **kw)
     info = {'class': type(model).__name__}
     if adapter:
         from peft import PeftModel

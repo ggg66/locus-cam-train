@@ -39,7 +39,7 @@ def main():
     ap.add_argument('--world-size', type=int, required=True)
     ap.add_argument('--gpu-seconds', nargs='*', default=[])
     ap.add_argument('--freeze', action='store_true')
-    ap.add_argument('--config-dir', default=os.path.join(HERE, 'configs', 'v2'))
+    ap.add_argument('--config-dir', default=os.path.join(HERE, 'configs', os.environ.get('LCAM_ROUND', 'v2')))
     a = ap.parse_args()
     cdir = a.config_dir
     ag, acomp = C.load(os.path.join(cdir, 'AG.yaml')), C.load(os.path.join(cdir, 'A_compute.yaml'))

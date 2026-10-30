@@ -6,7 +6,7 @@
 set -uo pipefail
 source "$(dirname "$0")/env.sh"
 SELFSH=$LCAM_CODE/launch/run_infer_pool.sh
-CONFIG=${LCAM_INFER_CONFIG:-configs/v2/common.yaml}
+CONFIG=${LCAM_INFER_CONFIG:-configs/$LCAM_ROUND/common.yaml}
 TASKS=${1:?task file}; NODES=${2:?node file}
 case "$TASKS" in /*) ;; *) TASKS=$LOCUS_ROOT/$TASKS ;; esac
 case "$NODES" in /*) ;; *) NODES=$LOCUS_ROOT/$NODES ;; esac
@@ -37,7 +37,7 @@ while read -r ip; do
   [ -z "${ip:-}" ] && continue
   case "$ip" in \#*) continue ;; esac
   for g in 0 1 2 3 4 5 6 7; do
-    cmd="LOCUS_ROOT=$LOCUS_ROOT CUDA_VISIBLE_DEVICES=$g LCAM_WORKER=1 LCAM_INFER_CONFIG=$CONFIG setsid nohup $SELFSH $TASKS $NODES > $LOCUS_ROOT/work/logs/infer/worker-$ip-$g.log 2>&1 < /dev/null &"
+    cmd="LOCUS_ROOT=$LOCUS_ROOT LCAM_ROUND=$LCAM_ROUND LCAM_MODEL=$LCAM_MODEL CUDA_VISIBLE_DEVICES=$g LCAM_WORKER=1 LCAM_INFER_CONFIG=$CONFIG setsid nohup $SELFSH $TASKS $NODES > $LOCUS_ROOT/work/logs/infer/worker-$ip-$g.log 2>&1 < /dev/null &"
     if [ "$ip" = "$SELF_IP" ]; then eval "$cmd"
     else ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o BatchMode=yes "$ip" "$cmd" </dev/null 2>/dev/null; fi
   done

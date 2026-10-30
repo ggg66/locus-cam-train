@@ -1,7 +1,8 @@
 """Configs for the smoke test: the real configs with the model pointed at the tiny mock model and tiny budgets.
 
   python tests/mock/make_smoke_config.py <tiny model dir> <out config dir>
-Writes the v1 configs into <out>/ and the v2 configs into <out>/v2/ (A_compute is calibrated by the smoke stage).
+Writes the v1 configs into <out>/ and the configs of the round $LCAM_ROUND (default v2) into <out>/<round>/
+(A_compute is calibrated by the smoke stage).
 """
 import os
 import sys
@@ -23,15 +24,16 @@ for arm in ('B0', 'B1', 'B2'):
     if arm in budgets:
         a['budget'] = budgets[arm]
     yaml.safe_dump(a, open(os.path.join(out, f'{arm}.yaml'), 'w'), allow_unicode=True, sort_keys=False)
-v2 = os.path.join(out, 'v2')
+rnd = os.environ.get('LCAM_ROUND', 'v2')
+v2 = os.path.join(out, rnd)
 os.makedirs(v2, exist_ok=True)
-c = yaml.safe_load(open(os.path.join(REPO, 'configs', 'v2', 'common.yaml')))
+c = yaml.safe_load(open(os.path.join(REPO, 'configs', rnd, 'common.yaml')))
 c['model'].update(id=os.path.abspath(tiny), revision=None)
 c['trainable'].update(lora_r=8, lora_alpha=16)
 c['optim']['effective_batch_size'] = 4
 yaml.safe_dump(c, open(os.path.join(v2, 'common.yaml'), 'w'), allow_unicode=True, sort_keys=False)
 for fam, ex in (('A_base', {'action_sft': 8}), ('AG', {'action_sft': 8, 'geometry_sft_v2': 4}), ('A_compute', None)):
-    f = yaml.safe_load(open(os.path.join(REPO, 'configs', 'v2', f'{fam}.yaml')))
+    f = yaml.safe_load(open(os.path.join(REPO, 'configs', rnd, f'{fam}.yaml')))
     if ex:
         f['exposures'] = ex
     else:

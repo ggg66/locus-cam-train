@@ -83,6 +83,20 @@ class Targets(unittest.TestCase):
         self.assertEqual(classify('model.visual.blocks.0.attn.qkv'), 'vision')
         self.assertEqual(classify('lm_head'), 'embedding')
 
+    def test_categories_gemma4(self):
+        L = 'model.language_model.layers.5'
+        for proj in ('q_proj', 'k_proj', 'v_proj', 'o_proj'):
+            self.assertEqual(classify(f'{L}.self_attn.{proj}'), 'attention')
+        for proj in ('gate_proj', 'up_proj', 'down_proj'):
+            self.assertEqual(classify(f'{L}.mlp.{proj}'), 'mlp')
+            self.assertEqual(classify(f'base_model.model.{L}.mlp.{proj}.lora_A.default.weight'), 'mlp')
+        self.assertEqual(classify('model.vision_tower.encoder.layers.0.mlp.gate_proj'), 'vision')
+        self.assertEqual(classify('model.vision_tower.encoder.layers.0.self_attn.q_proj'), 'vision')
+        self.assertEqual(classify('model.embed_vision.embedding_projection'), 'vision')   # the projector stays frozen
+        # the dense-MLP rule must not change the v2 (Qwen3.5 MoE) categories
+        self.assertEqual(classify('model.language_model.layers.3.mlp.shared_expert.gate_proj'), 'shared_expert')
+        self.assertEqual(classify('model.language_model.layers.3.mlp.experts.4.gate_proj'), 'routed_expert')
+
 
 class Parse(unittest.TestCase):
     def test_rules(self):
