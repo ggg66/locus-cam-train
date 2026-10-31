@@ -1,0 +1,7 @@
+# Reference only (not trained in v4): v2's AG defines the training compute every v4 family is matched to.
+base: common.yaml
+run_family: AG
+reference_only: true
+exposures:
+  action_sft: 15000
+  geometry_sft_v2: 5000

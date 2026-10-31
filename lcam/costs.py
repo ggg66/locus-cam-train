@@ -23,6 +23,24 @@ def schedule_cost(seq, stats, eff, micro, ws):
     return {'padded': padded, 'real': real, 'learned': learned}
 
 
+def match_kind(stats, fixed, vary, target, seed, eff, micro, ws, metric='padded', anchor='action_sft', streams=None):
+    """Smallest number of `vary` exposures such that the schedule fixed + {vary: n} (seed) costs at least `target`."""
+    def cost(n):
+        ex = dict(fixed, **{vary: n})
+        seq, _ = schedule_v2({k: range(len(stats[k])) for k in ex}, ex, seed, anchor=anchor, streams=streams)
+        return schedule_cost(seq, stats, eff, micro, ws)[metric]
+    lo, hi = 0 if fixed else eff, 4 * len(stats[vary]) * 10
+    while cost(hi) < target:
+        hi *= 2
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if cost(mid) >= target:
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo, cost(lo)
+
+
 def match_actions(recs_n, stats, target, seed, eff, micro, ws, metric='padded', lo=None, hi=None):
     """Smallest number of action exposures whose action-only schedule (seed) costs at least `target` (metric)."""
     def cost(n):

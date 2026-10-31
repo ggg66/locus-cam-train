@@ -30,11 +30,11 @@ NODES=$LOCUS_ROOT/work/v3_gemma/nodes.txt nohup scripts/run_all_v3.sh > /dev/nul
 | unit | 单元测试；在服务器上重建 C2 提示词，与冻结版本逐字节核对 | 任一测试失败 |
 | smoke | 缩小版随机 Gemma 4 走完全部脚本（单卡和 2 卡） | 没有输出 smoke passed |
 | check / stats | 真实处理器核对训练集和验证集；统计每条样本的 token 数 | 有编码错误 |
+| freeze | 按 token 数标定 A_compute 并冻结 | 超出容差 |
 | audit | 损失审计和批次追踪 | 学到的不是"答案 + `<turn|>`"，或图片数不对 |
 | equiv | 单卡和 8 卡第一步梯度对比 | 梯度不一致；LoRA 不是只挂在注意力层和 MLP 上 |
 | batchcheck | 推理批量 1 和 8 的答案对比 | 不停下：答案不一致时，后面的推理自动改用批量 1 |
 | short | 12 步短训练，测每步用时，重载适配器核对 | 训练出错或重载不一致 |
-| freeze | 按 token 数标定 A_compute 并冻结 | 超出容差 |
 | train | 9 次训练按节点排队，每个节点同时只跑一次 | 同一次训练失败两次（第一次失败会自动重跑） |
 | val / test | 验证集选检查点；终点和 B0 跑整套评测题 | 推理失败；test_V0 答案不是 6000 条 |
 | confirm | 用每次训练自己的 V0 答案生成 C2 提示词；C1（B0 + 9 个终点）和 C2（9 个终点）推理 | 推理失败 |

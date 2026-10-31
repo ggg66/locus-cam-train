@@ -7,6 +7,8 @@ round: v3_gemma
 model:
   id: ${LCAM_MODEL}          # local directory of google/gemma-4-31B-it at the revision below (export LCAM_MODEL=...)
   revision: 842da3794eaa0b77d5f08bae87a17459d91ff475   # Hugging Face main on 2026-10-30
+  hf_id: google/gemma-4-31B-it
+  expect_model_type: gemma4
   dtype: bfloat16
   device_map: auto           # one process per GPU; 31B bf16 (~62 GB) fits on one H20, peak memory is checked by the audit
 processor:

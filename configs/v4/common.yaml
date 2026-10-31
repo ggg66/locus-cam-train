@@ -1,0 +1,47 @@
+# v4 supervision study (docs/v4/README.md): what a model must be taught to transfer to unseen scene structures.
+# The v2 protocol on the v2 base, unchanged (model, LoRA, optimiser, batch, loss, checkpoints, decoding); only the
+# training sources differ. The controls are the finished v2 runs A_base / AG / A_compute (same seeds).
+protocol: v2
+round: v4
+model:
+  id: ${LCAM_MODEL}          # local directory of Qwen/Qwen3.5-35B-A3B at the revision below (export LCAM_MODEL=...)
+  revision: 59d61f3ce65a6d9863b86d2e96597125219dc754
+  hf_id: Qwen/Qwen3.5-35B-A3B
+  expect_model_type: qwen3_5_moe
+  dtype: bfloat16
+  device_map: auto           # one process per GPU; the whole model fits on one H20
+processor:
+  min_pixels: null
+  max_pixels: null
+  images_per_sample: 2       # main, overhead; checked for every training record
+chat:
+  enable_thinking: false
+data:
+  max_length: 4096           # longer = error, never truncated
+  loss_on: assistant_tokens_only
+trainable:
+  method: lora
+  lora_r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  lora_on: [attention, shared_expert]
+optim:
+  optimizer: adamw
+  lr: 1.0e-4
+  schedule: cosine
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  effective_batch_size: 64
+  micro_batch: 1             # one sample per forward pass: with padding, a sample's loss changed with its batch-mate (audit, 2026-10-24)
+  seeds: [0, 1, 2]
+loss:
+  reduction: sample_mean     # per sample: mean CE over its learned tokens; per step: weighted mean over all samples of the step
+  sample_weight:             # equal weights; with AG's 3:1 exposures this is 0.75 x action mean + 0.25 x geometry mean
+    action_sft: 1.0
+    geometry_sft_v2: 1.0
+checkpoints:
+  at_fraction: [0.25, 0.5, 0.75, 1.0]   # of the planned optimizer steps, same for every run family
+  primary: 1.0                          # the pre-registered endpoint; validation-best among these four is reported separately
+evaluation:
+  decoding: greedy
+  max_new_tokens: 512

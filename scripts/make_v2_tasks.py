@@ -23,8 +23,8 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 from lcam import config as C  # noqa: E402
 
-FAMILIES = ['A_base', 'AG', 'A_compute']
-ROUND = os.environ.get('LCAM_ROUND', 'v2')   # v3_gemma: the same suite on the Gemma 4 runs
+ROUND = os.environ.get('LCAM_ROUND', 'v2')   # v3_gemma: Gemma 4 runs; v4: the supervision study on the v2 base
+FAMILIES = C.families(os.path.join(HERE, 'configs', ROUND))   # v2 / v3_gemma: A_base, AG, A_compute
 RUNS = f'work/runs/{ROUND}'
 OUTS = f'work/outputs/{ROUND}'
 SUITE = [  # prompt file (bundle eval_prompts/), max new tokens
@@ -47,6 +47,12 @@ def endpoint_ckpt():
     return f'ckpt-{fr.index(float(common()["checkpoints"]["primary"])) + 1}'
 
 
+def cap(family, maxnew):
+    """A family whose answers carry more than the action (A_geomact: geometry, then action) sets a higher floor, so the
+    action is not cut off in scenes with many objects. The cap is fixed before the run; action-only answers stop long before it."""
+    return max(maxnew, int(C.load(os.path.join(HERE, 'configs', ROUND, f'{family}.yaml')).get('eval_min_new_tokens', 0)))
+
+
 def line(out, prompts, adapter, maxnew, batch=None):
     batch = batch or int(os.environ.get('LCAM_INFER_BATCH', 8))   # 1 when the batchcheck stage finds batch-dependent answers
     return '\t'.join([out, f'eval_prompts/{prompts}.jsonl', adapter, '0', str(batch), str(maxnew)])
@@ -65,25 +71,25 @@ def main():
             out.append(f'{nodes[i % len(nodes)]} configs/{ROUND}/{f}.yaml {s}')
     elif a.what == 'val':
         n = len(common()['checkpoints']['at_fraction'])
-        for _, _, tag in runs():
+        for f, _, tag in runs():
             for k in range(1, n + 1):
-                out.append(line(f'{RUNS}/{tag}/val/ckpt-{k}.jsonl', 'validation_V0', f'{RUNS}/{tag}/checkpoints/ckpt-{k}', 512))
+                out.append(line(f'{RUNS}/{tag}/val/ckpt-{k}.jsonl', 'validation_V0', f'{RUNS}/{tag}/checkpoints/ckpt-{k}', cap(f, 512)))
     elif a.what == 'test':
         ep = endpoint_ckpt()
-        for _, _, tag in runs():
+        for f, _, tag in runs():
             for p, m in SUITE:
-                out.append(line(f'{OUTS}/{tag}/{p}.jsonl', p, f'{RUNS}/{tag}/checkpoints/{ep}', m))
+                out.append(line(f'{OUTS}/{tag}/{p}.jsonl', p, f'{RUNS}/{tag}/checkpoints/{ep}', cap(f, m)))
         for p, m in SUITE + B0_ONLY:
             out.append(line(f'{OUTS}/B0-nothink/{p}.jsonl', p, '-', m))
     else:
         ep = endpoint_ckpt()
-        for _, _, tag in runs():
+        for f, _, tag in runs():
             sel = json.load(open(os.path.join(a.root, RUNS, tag, 'selection.json')))['selected']
             if sel == ep:
                 print(f'# {tag}: validation-best is the endpoint {ep}; no extra run', file=sys.stderr)
                 continue
             for p, m in SUITE:
-                out.append(line(f'{OUTS}-valbest/{tag}/{p}.jsonl', p, f'{RUNS}/{tag}/checkpoints/{sel}', m))
+                out.append(line(f'{OUTS}-valbest/{tag}/{p}.jsonl', p, f'{RUNS}/{tag}/checkpoints/{sel}', cap(f, m)))
     print('\n'.join(out))
 
 

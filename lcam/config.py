@@ -31,6 +31,19 @@ def load(path):
     return expand(arm)
 
 
+def families(config_dir):
+    """Trained run families of a round directory, in a fixed order: every <family>.yaml with a run_family that is not
+    marked reference_only (a reference such as v4's AG.yaml only defines the compute to match)."""
+    order = ['A_base', 'AG', 'A_compute']
+    out = []
+    for f in sorted(os.listdir(config_dir)):
+        if f.endswith('.yaml') and f != 'common.yaml':
+            c = load(os.path.join(config_dir, f))
+            if c.get('run_family') and not c.get('reference_only'):
+                out.append(c['run_family'])
+    return sorted(out, key=lambda x: (order.index(x) if x in order else len(order), x))
+
+
 def mix_and_samples(cfg, budget):
     """(mixture {kind: share}, total samples) for budget 'primary_fixed_total' or 'secondary_matched'."""
     mix = cfg.get('mix')

@@ -32,14 +32,19 @@ c['model'].update(id=os.path.abspath(tiny), revision=None)
 c['trainable'].update(lora_r=8, lora_alpha=16)
 c['optim']['effective_batch_size'] = 4
 yaml.safe_dump(c, open(os.path.join(v2, 'common.yaml'), 'w'), allow_unicode=True, sort_keys=False)
-for fam, ex in (('A_base', {'action_sft': 8}), ('AG', {'action_sft': 8, 'geometry_sft_v2': 4}), ('A_compute', None)):
-    f = yaml.safe_load(open(os.path.join(REPO, 'configs', rnd, f'{fam}.yaml')))
-    if ex:
-        f['exposures'] = ex
-    else:
+sys.path.insert(0, REPO)
+from lcam.config import families  # noqa: E402
+src = os.path.join(REPO, 'configs', rnd)
+for f in sorted(x for x in os.listdir(src) if x.endswith('.yaml') and x not in ('common.yaml',)):
+    c2 = yaml.safe_load(open(os.path.join(src, f)))
+    if c2.get('exposures'):
+        # tiny budgets: actions 8, any other numeric source 4; calibrated sources stay from_calibration
+        c2['exposures'] = {k: v if v == 'from_calibration' else (8 if k in ('action_sft', 'geomact_v4') else 4) for k, v in c2['exposures'].items()}
+    if c2.get('calibration'):
         # 12 records and an effective batch of 4: one micro-batch more or less is ~a quarter of AG's compute, so the real
         # 5 % tolerance cannot be met at this scale (at 64 x 15000 one batch is ~0.3 %). The smoke run only checks that
-        # calibration, freezing and A_compute training work; the real configs keep 0.05.
-        f['calibration']['tolerance'] = 1.0
-    yaml.safe_dump(f, open(os.path.join(v2, f'{fam}.yaml'), 'w'), allow_unicode=True, sort_keys=False)
+        # calibration, freezing and the calibrated families' training work; the real configs keep 0.05.
+        c2['calibration']['tolerance'] = 1.0
+    yaml.safe_dump(c2, open(os.path.join(v2, f), 'w'), allow_unicode=True, sort_keys=False)
+print('families', families(v2))
 print('smoke configs ->', out)

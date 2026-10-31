@@ -24,7 +24,8 @@ sys.path.insert(0, HERE)
 from lcam.parse import parse  # noqa: E402
 
 ROUND = os.environ.get('LCAM_ROUND', 'v2')
-FAMILIES = ['A_base', 'AG', 'A_compute']
+from lcam import config as C  # noqa: E402
+FAMILIES = C.families(os.path.join(HERE, 'configs', ROUND))
 CANDIDATES = '\n\n下面是 12 个候选挪法（含义同上）：\n'
 APART = '；apart：两个目标在画面上是否水平分开'
 KEY = '%+d,%+d,%+d'

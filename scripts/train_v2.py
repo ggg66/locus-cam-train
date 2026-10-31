@@ -163,7 +163,8 @@ def main():
         raise SystemExit(f'{len(bad)} records do not have {n_img} images, e.g. {bad[:3]}')
     if 'geometry_sft' in recs:
         raise SystemExit('v2 trains on geometry_sft_v2 (hidden fields as defaults), not the v1 geometry_sft')
-    seq, counts = schedule_v2(recs, ex, a.seed)
+    anchor_kind = cfg.get('anchor', 'action_sft')
+    seq, counts = schedule_v2(recs, ex, a.seed, anchor=anchor_kind, streams=cfg.get('pool_streams'))
     o, L = cfg['optim'], cfg['loss']
     if 'micro_batch' in o and a.micro_batch != int(o['micro_batch']):
         raise SystemExit(f'--micro-batch {a.micro_batch} differs from optim.micro_batch {o["micro_batch"]} of {a.config}')
@@ -179,7 +180,7 @@ def main():
     if a.max_steps:
         layout = layout[:a.max_steps]
         ckpt_steps = {len(layout): len(layout) / planned_steps} if a.save_at_end else {}
-    anchor = [i for k, i in seq if k == 'action_sft']
+    anchor = [i for k, i in seq if k == anchor_kind]
     os.makedirs(a.out, exist_ok=True)
     import transformers
     import peft
@@ -228,7 +229,7 @@ def main():
                               'first_micro_batch': stats, 'planned_exposures': counts, 'planned_optimizer_steps': planned_steps,
                               'world_size': ws, 'grad_accum': accum, 'checkpoint_steps': run['checkpoint_steps']}, ensure_ascii=False, indent=1))
         return
-    probe = load_probe(a.bundle, [k for k in ('action_sft', 'geometry_sft_v2')])
+    probe = load_probe(a.bundle, list(cfg.get('probe_kinds', ['action_sft', 'geometry_sft_v2'])))
     from transformers import get_cosine_schedule_with_warmup
     opt = torch.optim.AdamW(params, lr=float(o['lr']), weight_decay=float(o['weight_decay']))
     sched = get_cosine_schedule_with_warmup(opt, int(o['warmup_ratio'] * planned_steps), planned_steps)

@@ -1,0 +1,13 @@
+# A_nextview - "imagine the next view": A_base's 15000 action exposures plus nextview_v4 records (one legal candidate
+# action -> every object's clipped projected box, depth and blocked sample rays after the move, measured by Locus),
+# as many as make the training compute equal to AG's (calibration.json).
+base: common.yaml
+run_family: A_nextview
+exposures:
+  action_sft: 15000
+  nextview_v4: from_calibration
+probe_kinds: [action_sft, nextview_v4]
+calibration:
+  match: AG
+  metric: padded_tokens
+  tolerance: 0.05

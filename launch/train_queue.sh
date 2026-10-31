@@ -40,7 +40,7 @@ while true; do
       mv "$LOCUS_ROOT/work/runs/$LCAM_ROUND/$tag" "$LOCUS_ROOT/work/runs/$LCAM_ROUND/$tag.failed-$(date +%m%d%H%M)" 2>/dev/null
       cp "$LOCUS_ROOT/work/logs/$LCAM_ROUND-$tag.log" "$Q/$tag.failed-$(date +%m%d%H%M).log" 2>/dev/null
       echo "$(date '+%F %T') $tag stopped without finishing on $node; retrying"
-      echo $((tries+1)) > "$Q/$tag.tries"; rm -f "$Q/$tag.node"
+      echo $((tries+1)) > "$Q/$tag.tries"; rm -f "${Q:?}/${tag:?}.node"
     fi
     for ip in "${NODE_IPS[@]}"; do                       # first free node that is not reserved for another run
       reserved=0

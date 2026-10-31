@@ -37,6 +37,9 @@ for split, n in (('train', a.train), ('validation', a.val)):
     if os.path.exists(os.path.join(a.src, f'training_exports/{split}/geometry_sft_v2.jsonl')):   # v2 add-on
         take(f'training_exports/{split}/geometry_sft_v2.jsonl', n, pick=lambda r: -len(r['hidden_paths']))
         shutil.copyfile(os.path.join(a.src, f'training_exports/{split}/meta_v2.json'), os.path.join(a.out, f'training_exports/{split}/meta_v2.json'))
+    for k in ('consequence_v4', 'geomact_v4', 'nextview_v4'):     # v4 add-on (geomact_v4 is aligned with action_sft: same first n roots)
+        if os.path.exists(os.path.join(a.src, f'training_exports/{split}/{k}.jsonl')):
+            take(f'training_exports/{split}/{k}.jsonl', n)
 val = take('eval_prompts/validation_V0.jsonl', a.val)
 for name in ('test_V0', 'test_variants_V0', 'test_diagnostic_S', 'test_diagnostic_no_image', 'test_diagnostic_geom_predict',
              'test_diagnostic_consequence', 'test_target_swap_V0', 'dev_V0', 'dev_V0_placeholder'):

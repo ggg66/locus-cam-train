@@ -10,7 +10,8 @@ import json
 import os
 import random
 
-ALLOWED = {'action_sft', 'geometry_sft', 'geometry_sft_v2'}   # never outcome_records or geometry_sft_privileged
+ALLOWED = {'action_sft', 'geometry_sft', 'geometry_sft_v2',     # never outcome_records or geometry_sft_privileged
+           'consequence_v4', 'geomact_v4', 'nextview_v4'}   # v4 supervision study (training_exports/export_v4.py)
 
 
 def read_jsonl(path):
@@ -71,12 +72,15 @@ def kind_pool(n_records, n, seed, kind):
     return pool[:n]
 
 
-def schedule_v2(recs, exposures, seed, anchor='action_sft'):
+def schedule_v2(recs, exposures, seed, anchor='action_sft', streams=None):
     """Sample order of one v2 run: (kind, record_index) list and exposure counts.
     Every source draws from its own seeded stream, so the anchor (action) sequence of a seed does not depend on
     what else is mixed in: AG's action samples are, in order, exactly A-base's, and A-compute's begin with them.
-    The other sources go to seeded positions between them."""
-    pools = {k: kind_pool(len(recs[k]), int(n), seed, k) for k, n in exposures.items()}
+    The other sources go to seeded positions between them.
+    `streams` maps a kind to the stream it draws from (default: its own name). A source whose records are aligned
+    one-to-one with action_sft (geomact_v4) can draw from the action_sft stream, so its roots come in A-base's order."""
+    streams = streams or {}
+    pools = {k: kind_pool(len(recs[k]), int(n), seed, streams.get(k, k)) for k, n in exposures.items()}
     seq = [(anchor, i) for i in pools[anchor]]
     others = [(k, i) for k in sorted(exposures) if k != anchor for i in pools[k]]
     if others:

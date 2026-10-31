@@ -4,7 +4,7 @@
 #   PY          python of the training venv (default $LOCUS_ROOT/venv/bin/python)
 #   BUNDLE      data bundle (default $LOCUS_ROOT/data/locus-bundle)
 #   LCAM_ROUND  training round: configs/<round>/, work/<round>/, work/runs/<round>/, work/outputs/<round>/
-#               (default v2 = Qwen3.5-35B-A3B; v3_gemma = Gemma 4 31B, docs/v3_gemma/README.md)
+#               (default v2 = Qwen3.5-35B-A3B; v3_gemma = Gemma 4 31B, docs/v3_gemma/README.md; v4 = supervision study on the v2 base, docs/v4/README.md)
 #   LCAM_MODEL  local weights of the round's base model (default: Qwen3.5-35B-A3B for v2, gemma-4-31B-it for v3_gemma)
 : "${LOCUS_ROOT:?set LOCUS_ROOT to the shared project directory}"
 LCAM_CODE=${LCAM_CODE:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}

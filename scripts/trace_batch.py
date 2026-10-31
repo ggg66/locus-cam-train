@@ -58,7 +58,7 @@ def main():
     cfg = C.load(a.config)
     ex = C.exposures(cfg, a.config)
     recs = load_exports(a.bundle, 'train', sorted(ex))
-    seq, _ = schedule_v2(recs, ex, a.seed)
+    seq, _ = schedule_v2(recs, ex, a.seed, anchor=cfg.get('anchor', 'action_sft'), streams=cfg.get('pool_streams'))
     processor = load_processor(cfg)
     tok = processor.tokenizer
     img_tok = getattr(processor, 'image_token', '<|image_pad|>')

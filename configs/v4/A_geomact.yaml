@@ -1,0 +1,16 @@
+# A_geomact - "act through geometry": every action is taught as geometry first, then the action (geomact_v4: the V0
+# prompt verbatim, target = geometry_sft_v2 target + newline + action). Roots are drawn from the action_sft stream, so
+# the first 15000 come in A_base's order; the number of exposures matches AG's training compute (calibration.json).
+base: common.yaml
+run_family: A_geomact
+anchor: geomact_v4
+pool_streams:
+  geomact_v4: action_sft
+exposures:
+  geomact_v4: from_calibration
+probe_kinds: [geomact_v4]
+eval_min_new_tokens: 1024    # the answer holds the geometry before the action; 512 could cut the action off in larger scenes
+calibration:
+  match: AG
+  metric: padded_tokens
+  tolerance: 0.05

@@ -1,0 +1,13 @@
+# A_cons - "what does this move do": A_base's 15000 action exposures (same sequence per seed) plus consequence_v4
+# records (one candidate action -> measured outcome per target, then the five constraint fields), as many as make the
+# training compute equal to AG's (scripts/calibrate_compute.py, frozen in calibration.json before any run).
+base: common.yaml
+run_family: A_cons
+exposures:
+  action_sft: 15000
+  consequence_v4: from_calibration
+probe_kinds: [action_sft, consequence_v4]
+calibration:
+  match: AG
+  metric: padded_tokens
+  tolerance: 0.05
