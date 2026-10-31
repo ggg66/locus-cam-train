@@ -46,8 +46,11 @@ NODES=$LOCUS_ROOT/work/v4/nodes.txt ADDON_TAR=$LOCUS_ROOT/data/locus-bundle-v1.7
 
 ## 判定标准（运行前写定）
 
-每组和 A_compute（同训练量、只学动作）比较，主指标是留出结构族（test_geometry）上的成功率。
+每组和 A_compute（同训练量、只学动作）、A_base（只学动作）比较，主指标是留出结构族（test_geometry）上的成功率。
 
-- **有效**：3 个种子的均值比 A_compute 高至少 5 个点，且按题重抽样的 95% 区间不含 0。
+- **有效**，三条同时满足：
+  1. 3 个种子的均值比 A_compute 高至少 5 个点，且按题重抽样的 95% 区间不含 0；
+  2. 3 个种子的均值比 A_base 也高至少 5 个点，且区间不含 0；
+  3. 至少 2 个种子同时高于这两个对照组的 3 种子均值。
 - **同时报告**：test_id 和 test_composition（看是否以牺牲分布内为代价）、F13、主测试总分、几何路线、C1、C2。
 - 不因为某一组结果好就追加训练或调参。
