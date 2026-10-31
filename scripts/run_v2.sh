@@ -156,7 +156,7 @@ for stage in "$@"; do
       cd "$LOCUS_ROOT"
       out=work/$LCAM_ROUND/locus-$LCAM_ROUND-results-$(date +%m%d).tar
       list=$(ls -d work/outputs/$LCAM_ROUND work/outputs/$LCAM_ROUND-valbest work/$LCAM_ROUND/audit work/$LCAM_ROUND/*.txt work/runs/$LCAM_ROUND/*/run.json work/runs/$LCAM_ROUND/*/metrics.jsonl \
-                   work/runs/$LCAM_ROUND/*/trainable_manifest.json work/runs/$LCAM_ROUND/*/selection.json work/runs/$LCAM_ROUND/*/val work/runs/$LCAM_ROUND/*/checkpoints/*/exposures.json 2>/dev/null)
+                   work/runs/$LCAM_ROUND/*/trainable_manifest.json work/runs/$LCAM_ROUND/*/selection.json work/runs/$LCAM_ROUND/*/val work/runs/$LCAM_ROUND/*/checkpoints/*/exposures.json 2>/dev/null || true)
       tar -cf "$out" --exclude='*.safetensors' --exclude='*.pt' $list
       sha256sum "$out" ;;
     *) echo "unknown stage $stage"; exit 1 ;;

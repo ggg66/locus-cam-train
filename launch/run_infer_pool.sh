@@ -37,7 +37,8 @@ while read -r ip; do
   [ -z "${ip:-}" ] && continue
   case "$ip" in \#*) continue ;; esac
   for g in 0 1 2 3 4 5 6 7; do
-    cmd="LOCUS_ROOT=$LOCUS_ROOT LCAM_ROUND=$LCAM_ROUND LCAM_MODEL=$LCAM_MODEL CUDA_VISIBLE_DEVICES=$g LCAM_WORKER=1 LCAM_INFER_CONFIG=$CONFIG setsid nohup $SELFSH $TASKS $NODES > $LOCUS_ROOT/work/logs/infer/worker-$ip-$g.log 2>&1 < /dev/null &"
+    printf -v cmd 'LOCUS_ROOT=%q LCAM_ROUND=%q LCAM_MODEL=%q LCAM_CODE=%q BUNDLE=%q PY=%q SELF_IP=%q PYTHONDONTWRITEBYTECODE=1 CUDA_VISIBLE_DEVICES=%q LCAM_WORKER=1 LCAM_INFER_CONFIG=%q setsid nohup %q %q %q > %q 2>&1 < /dev/null &' \
+      "$LOCUS_ROOT" "$LCAM_ROUND" "$LCAM_MODEL" "$LCAM_CODE" "$BUNDLE" "$PY" "$ip" "$g" "$CONFIG" "$SELFSH" "$TASKS" "$NODES" "$LOCUS_ROOT/work/logs/infer/worker-$ip-$g.log"
     if [ "$ip" = "$SELF_IP" ]; then eval "$cmd"
     else ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o BatchMode=yes "$ip" "$cmd" </dev/null 2>/dev/null; fi
   done

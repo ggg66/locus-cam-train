@@ -34,7 +34,7 @@ infer_batch() { cat "$W/infer_batch" 2>/dev/null || echo 8; }
 
 for r in ${REDO:-}; do rm -f "${ST:?}/${r:?}.ok"; done
 grep -qx "$SELF_IP" <(grep -v '^#' "$NODES" | awk 'NF {print $1}') || { echo "this node ($SELF_IP) is not in $NODES"; exit 1; }
-echo "== run_all $LCAM_ROUND $(date '+%F %T')  code $(git rev-parse --short HEAD)  nodes $(grep -cv '^#' "$NODES")  model $LCAM_MODEL"
+echo "== run_all $LCAM_ROUND $(date '+%F %T')  code $(git rev-parse --short HEAD 2>/dev/null || echo no-git)  nodes $(grep -cv '^#' "$NODES")  model $LCAM_MODEL"
 echo "   families: $(RI families)   training sources: $(RI kinds)"
 
 for stage in "${STAGES[@]}"; do
@@ -65,7 +65,7 @@ for stage in "${STAGES[@]}"; do
                $(for k in $(RI kinds); do echo training_exports/train/$k.jsonl training_exports/validation/$k.jsonl; done); do
         [ -f "$BUNDLE/$f" ] || fail "$BUNDLE/$f missing: the v1 bundle with the v2, confirm-1026 (and for v4 the v4) add-ons is needed"
       done
-      (git rev-parse HEAD; git status --short) > "$W/code_commit.txt" ;;
+      { git rev-parse HEAD && git status --short; } > "$W/code_commit.txt" 2>/dev/null || echo 'no git metadata (source snapshot)' > "$W/code_commit.txt" ;;
     unit)
       "$PY" -m unittest discover -s tests > "$W/unit.log" 2>&1 || { tail -30 "$W/unit.log"; fail 'unit tests failed'; }
       tail -3 "$W/unit.log"
@@ -146,7 +146,7 @@ PYEOF
                    work/$LCAM_ROUND/confirm work/$LCAM_ROUND/queue work/$LCAM_ROUND/*.txt work/$LCAM_ROUND/*.json work/$LCAM_ROUND/infer_batch \
                    work/$LCAM_ROUND/run_all.log work/runs/$LCAM_ROUND/*/run.json work/runs/$LCAM_ROUND/*/metrics.jsonl \
                    work/runs/$LCAM_ROUND/*/trainable_manifest.json work/runs/$LCAM_ROUND/*/selection.json work/runs/$LCAM_ROUND/*/val \
-                   work/runs/$LCAM_ROUND/*/checkpoints/*/exposures.json work/logs/$LCAM_ROUND-*.log 2>/dev/null)
+                   work/runs/$LCAM_ROUND/*/checkpoints/*/exposures.json work/logs/$LCAM_ROUND-*.log 2>/dev/null || true)
       sha256sum work/runs/$LCAM_ROUND/*/checkpoints/ckpt-4/adapter_model.safetensors > work/$LCAM_ROUND/checkpoint_sha256.txt
       tar -cf "$out" --exclude='*.safetensors' --exclude='*.pt' $list work/$LCAM_ROUND/checkpoint_sha256.txt
       sha256sum "$out" | tee "$out.sha256"
