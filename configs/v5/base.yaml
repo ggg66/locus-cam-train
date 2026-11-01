@@ -1,0 +1,6 @@
+# Development baseline = A_base on the development split: action supervision only, 15000 action exposures. Every method
+# is compared with it; method 1 starts from its final checkpoint.
+base: common.yaml
+run_family: base
+exposures:
+  action_sft: 15000

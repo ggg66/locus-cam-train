@@ -88,7 +88,7 @@ class TrainV2Mock(unittest.TestCase):
                 os.makedirs(d, exist_ok=True)
                 torch.save(self.state_dict(), os.path.join(d, 'adapter.pt'))
 
-        def load_exports(bundle, split, kinds):
+        def load_exports(bundle, split, kinds, exclude_families=None):
             return {k: [{'id': f'{split}-{k}-{i}', 'images': ['m.png', 'o.png'], 'root_id': f'{split}-{i}', 'task_id': f't{i}',
                          'pair_group_id': f'{split}-{i}', 'source_split': split} for i in range(10)] for k in kinds}
 
@@ -179,7 +179,7 @@ class MicroBatchPinned(unittest.TestCase):
             self.assertEqual(c['optim']['micro_batch'], 1)
             yaml.safe_dump(c, open(os.path.join(d, 'common.yaml'), 'w'))
             yaml.safe_dump({'base': 'common.yaml', 'run_family': 'A_base', 'exposures': {'action_sft': 8}}, open(os.path.join(d, 'A_base.yaml'), 'w'))
-            T.load_exports = lambda b, s, ks: {k: [{'id': f'{k}{i}', 'images': ['a', 'b'], 'root_id': str(i), 'task_id': str(i),
+            T.load_exports = lambda b, s, ks, exclude_families=None: {k: [{'id': f'{k}{i}', 'images': ['a', 'b'], 'root_id': str(i), 'task_id': str(i),
                                                    'pair_group_id': str(i), 'source_split': s} for i in range(10)] for k in ks}
             T.check_isolation = lambda *x: None
             argv = sys.argv

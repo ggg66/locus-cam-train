@@ -1,0 +1,8 @@
+# Method 4, multi-solution targets: A_base's 15000 action exposures in the same root order, but each exposure's target is
+# one action of the root's robust feasible set (drawn per seed and schedule position) instead of the single min-L1 label.
+base: common.yaml
+run_family: m4_multi
+exposures:
+  action_sft: 15000
+data:
+  target_choice: robust_set

@@ -1,0 +1,8 @@
+# Method 3, inverse imagination: A_base's 15000 action exposures plus 5000 inverse_v5 records (given the view after a move,
+# which move produced it), the same number of auxiliary exposures as AG's geometry records.
+base: common.yaml
+run_family: m3_inverse
+exposures:
+  action_sft: 15000
+  inverse_v5: 5000
+probe_kinds: [action_sft, inverse_v5]

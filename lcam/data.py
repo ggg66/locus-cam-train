@@ -11,7 +11,8 @@ import os
 import random
 
 ALLOWED = {'action_sft', 'geometry_sft', 'geometry_sft_v2',     # never outcome_records or geometry_sft_privileged
-           'consequence_v4', 'geomact_v4', 'nextview_v4'}   # v4 supervision study (training_exports/export_v4.py)
+           'consequence_v4', 'geomact_v4', 'nextview_v4',   # v4 supervision study (training_exports/export_v4.py)
+           'imagact_v5', 'inverse_v5'}                      # v5 method study (training_exports/export_v5.py)
 
 
 def read_jsonl(path):
@@ -19,7 +20,9 @@ def read_jsonl(path):
         return [json.loads(line) for line in f if line.strip()]
 
 
-def load_exports(bundle, split, kinds):
+def load_exports(bundle, split, kinds, exclude_families=None):
+    """{kind: records}. exclude_families (v5 development split): records of these families are left out."""
+    drop = set(exclude_families or ())
     out = {}
     for k in kinds:
         if k not in ALLOWED:
@@ -28,7 +31,7 @@ def load_exports(bundle, split, kinds):
         for r in recs:
             if r['source_split'] != split:
                 raise ValueError(f'{r["id"]}: source_split {r["source_split"]} != {split}')
-        out[k] = recs
+        out[k] = [r for r in recs if r.get('family_id') not in drop]
     return out
 
 
@@ -40,6 +43,17 @@ def check_isolation(bundle, split, recs):
            for k in (r['root_id'], r['task_id'], r['pair_group_id']) if others.get(k, split) != split]
     if bad:
         raise ValueError(f'{len(bad)} records leak across splits, e.g. {bad[:3]}')
+
+
+def choose_target(rec, choice, seed, pos):
+    """v5 method 4 (multi-solution targets): replace the single min-L1 action label of an action_sft record by one action
+    of its robust_set / feasible_set, drawn from a stream fixed by (seed, schedule position)."""
+    if not choice:
+        return rec
+    keys = sorted(rec[choice])
+    k = random.Random(f'{seed}|target|{pos}').choice(keys)
+    act = [int(x) for x in k.split(',')]
+    return dict(rec, target=json.dumps({'move_m': dict(zip(('right', 'up', 'back'), act))}), target_action=act)
 
 
 def schedule(recs, mix, n_samples, seed):

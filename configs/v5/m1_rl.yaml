@@ -1,0 +1,26 @@
+# Method 1, RL with execution rewards: GRPO from the development baseline's final checkpoint (base-s<seed>/ckpt-4).
+# Reward from the outcome table of the training root: satisfied 1, spatially unmet 0.3 x passed checks, illegal 0,
+# no valid action -0.5 (lcam/rewards.py). 200 steps x 8 GPUs x 2 prompts x 8 samples (3200 prompts, ~0.75 passes).
+base: common.yaml
+run_family: m1_rl
+init_from: base
+rl:
+  prompt_kind: action_sft
+  steps: 200
+  prompts_per_rank: 2
+  group_size: 8
+  temperature: 1.0
+  top_p: 1.0
+  max_new_tokens: 64
+  lr: 1.0e-5
+  warmup_steps: 5
+  grad_clip: 1.0
+  normalize_std: true
+  reward:
+    type: action
+    satisfied: 1.0
+    partial_max: 0.3
+    illegal: 0.0
+    invalid: -0.5
+  checkpoints:
+    at_fraction: [0.5, 1.0]

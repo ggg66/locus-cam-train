@@ -1,0 +1,11 @@
+# Method 2, stage 1 (SFT): imagine, then act. The V0 prompt verbatim; the answer first states the outcome of the move it
+# makes (consequence_v4 format: per target height, margin, blocked, hits, then the five constraint fields), then the move.
+# Roots come in A_base's order (imagact_v5 is aligned with action_sft), 15000 exposures. Stage 2 is m2_rl.yaml.
+base: common.yaml
+run_family: m2_imagact
+anchor: imagact_v5
+pool_streams:
+  imagact_v5: action_sft
+exposures:
+  imagact_v5: 15000
+probe_kinds: [imagact_v5]

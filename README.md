@@ -2,6 +2,8 @@
 
 > **国际一线模型零样本评测（只推理）**：`scripts/run_api_models.py`，模型清单、费用和用法见 [docs/api_frontier/README.md](docs/api_frontier/README.md)。
 >
+> **v5（方法开发：强化学习、先想象再行动、逆向想象、多解标签，在开发集上比较）**：操作说明见 [docs/v5/README.md](docs/v5/README.md)，依次运行 `scripts/run_v5.sh m1`、`m2`、`m3`、`m4`，配置在 `configs/v5/`。
+
 > **v4（监督对照研究：后果、几何推动作、下一画面，同一套 v2 协议）**：操作说明见 [docs/v4/README.md](docs/v4/README.md)，一条命令 `scripts/run_all_v4.sh`，配置在 `configs/v4/`。
 
 > **v3_gemma（第二个底座 Gemma 4 31B，同一套 v2 协议）**：操作说明见 [docs/v3_gemma/README.md](docs/v3_gemma/README.md)，设置 `LCAM_ROUND=v3_gemma` 后沿用 v2 的脚本，配置在 `configs/v3_gemma/`。不设置时一切照旧是 v2。

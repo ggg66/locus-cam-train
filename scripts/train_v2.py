@@ -43,7 +43,7 @@ from torch.utils.data import DataLoader, Dataset
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lcam import config as C  # noqa: E402
-from lcam.data import check_isolation, load_exports, schedule_v2, step_layout  # noqa: E402
+from lcam.data import check_isolation, choose_target, load_exports, schedule_v2, step_layout  # noqa: E402
 from lcam.encode import collate, encode  # noqa: E402
 from lcam.loss import microbatch_objective, per_sample_ce, rank_grad_op  # noqa: E402
 from lcam.model import load_model, load_processor, trainable_summary  # noqa: E402
@@ -97,15 +97,17 @@ def barrier(ws):
 
 
 class Items(Dataset):
-    def __init__(self, seq, recs, processor, bundle, max_length):
+    def __init__(self, seq, recs, processor, bundle, max_length, target_choice=None, seed=0):
         self.seq, self.recs, self.processor, self.bundle, self.max_length = seq, recs, processor, bundle, max_length
+        self.target_choice, self.seed = target_choice, seed
 
     def __len__(self):
         return len(self.seq)
 
     def __getitem__(self, pos):
         kind, j = self.seq[pos]
-        e = encode(self.processor, self.bundle, self.recs[kind][j], self.max_length)
+        rec = choose_target(self.recs[kind][j], self.target_choice if kind == 'action_sft' else None, self.seed, pos)
+        e = encode(self.processor, self.bundle, rec, self.max_length)
         e['kind'] = kind
         return e
 
@@ -155,7 +157,7 @@ def main():
         raise SystemExit(f'{a.config} is not a v2 config; v1 configs run with scripts/train.py')
     ex = C.exposures(cfg, a.config)
     kinds = sorted(ex)
-    recs = load_exports(a.bundle, 'train', kinds)
+    recs = load_exports(a.bundle, 'train', kinds, exclude_families=cfg['data'].get('exclude_families'))
     check_isolation(a.bundle, 'train', recs)
     n_img = int(cfg['processor']['images_per_sample'])
     bad = [r['id'] for rs in recs.values() for r in rs if len(r['images']) != n_img]
@@ -219,7 +221,10 @@ def main():
     pad = processor.tokenizer.pad_token_id
     dev = next(model.parameters()).device
     mine = [mb for st in layout for mb in st['ranks'][rank]]
-    dl = DataLoader(Items(seq, recs, processor, a.bundle, cfg['data']['max_length']), batch_sampler=mine, num_workers=a.workers,
+    tc = cfg['data'].get('target_choice')
+    if tc not in (None, 'robust_set', 'feasible_set'):
+        raise SystemExit(f'data.target_choice {tc} is not robust_set or feasible_set')
+    dl = DataLoader(Items(seq, recs, processor, a.bundle, cfg['data']['max_length'], tc, a.seed), batch_sampler=mine, num_workers=a.workers,
                     collate_fn=lambda b: (collate(b, pad), [x['kind'] for x in b], [x['stats'] for x in b]))
     it = iter(dl)
     if not a.allow_optimizer_step:

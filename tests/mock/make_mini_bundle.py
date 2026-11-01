@@ -3,6 +3,7 @@
   python tests/mock/make_mini_bundle.py <real bundle> <out> [--train 12] [--val 6] [--test 4]
 """
 import argparse
+import gzip
 import json
 import os
 import shutil
@@ -37,7 +38,7 @@ for split, n in (('train', a.train), ('validation', a.val)):
     if os.path.exists(os.path.join(a.src, f'training_exports/{split}/geometry_sft_v2.jsonl')):   # v2 add-on
         take(f'training_exports/{split}/geometry_sft_v2.jsonl', n, pick=lambda r: -len(r['hidden_paths']))
         shutil.copyfile(os.path.join(a.src, f'training_exports/{split}/meta_v2.json'), os.path.join(a.out, f'training_exports/{split}/meta_v2.json'))
-    for k in ('consequence_v4', 'geomact_v4', 'nextview_v4'):     # v4 add-on (geomact_v4 is aligned with action_sft: same first n roots)
+    for k in ('consequence_v4', 'geomact_v4', 'nextview_v4', 'imagact_v5', 'inverse_v5'):   # v4 / v5 add-ons (geomact_v4, imagact_v5: aligned with action_sft)
         if os.path.exists(os.path.join(a.src, f'training_exports/{split}/{k}.jsonl')):
             take(f'training_exports/{split}/{k}.jsonl', n)
 val = take('eval_prompts/validation_V0.jsonl', a.val)
@@ -51,6 +52,19 @@ keep = {r['task_id']: index[r['task_id']] for r in val}
 for tid, root in keep.items():
     shutil.copyfile(os.path.join(a.src, 'validation_tables', root + '.json'), os.path.join(a.out, 'validation_tables', root + '.json'))
 json.dump(keep, open(os.path.join(a.out, 'validation_tables', 'index.json'), 'w'))
+if os.path.exists(os.path.join(a.src, 'reward_tables', 'train.jsonl.gz')):     # v5 add-on: development prompts and reward tables
+    held = take('eval_prompts/dev_heldfam_V0.jsonl', a.test)
+    seen = [dict(v, family_id='mini') for v in val]                            # scored with the validation tables copied above
+    with open(os.path.join(a.out, 'eval_prompts', 'dev_seen_V0.jsonl'), 'w', encoding='utf-8') as f:
+        for r in seen:
+            f.write(json.dumps(r, ensure_ascii=False) + '\n')
+    roots = {json.loads(l)['root_id'] for l in open(os.path.join(a.out, 'training_exports/train/action_sft.jsonl'))} | {r['root_id'] for r in held}
+    os.makedirs(os.path.join(a.out, 'reward_tables'))
+    with gzip.open(os.path.join(a.src, 'reward_tables', 'train.jsonl.gz'), 'rt', encoding='utf-8') as fi, \
+            gzip.open(os.path.join(a.out, 'reward_tables', 'train.jsonl.gz'), 'wt', encoding='utf-8') as fo:
+        for line in fi:
+            if json.loads(line)['root_id'] in roots:
+                fo.write(line)
 shutil.copyfile(os.path.join(a.src, 'splits_index.json'), os.path.join(a.out, 'splits_index.json'))
 for p in images:
     os.makedirs(os.path.dirname(os.path.join(a.out, p)), exist_ok=True)
