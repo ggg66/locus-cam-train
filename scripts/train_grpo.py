@@ -6,9 +6,11 @@
 Each optimizer step: every rank takes `rl.prompts_per_rank` training prompts (the V0 prompt of `rl.prompt_kind` records,
 development families excluded), samples `rl.group_size` answers per prompt from the current policy, scores them with
 lcam.rewards against the root's outcome table, and turns the rewards of each prompt's group into advantages. The update is
-on-policy and single-pass, so the policy ratio is 1 and the loss is  -sum_i A_i * mean_t log p(token_t) / N  over the N
-samples (all ranks) with a non-zero advantage; rank gradients are summed. No KL term and no reference model (rl.kl is not
-supported); LoRA dropout is switched off so that the sampling and the trained policy are the same function.
+on-policy and single-pass, so the policy ratio is 1 and the loss is  -sum_i A_i * mean_t log p(token_t) / N  with N = all
+samples of the step on all ranks (samples of groups without reward differences have A = 0 and are not forwarded); rank
+gradients are summed. Sampling uses temperature 1, top-p 1, no top-k, so the samples come from exactly the policy whose
+log-probabilities are trained. No KL term and no reference model (rl.kl is not supported); LoRA dropout is switched off so
+that the sampling and the trained policy are the same function.
 Records in <out>/: run.json, metrics.jsonl (per step: reward, success, outcome counts, imagination accuracy, share of
 groups without signal, answer length), checkpoints/ckpt-<k>/ at rl.checkpoints.at_fraction of the steps.
 """
@@ -115,6 +117,8 @@ def main():
     rl = cfg['rl']
     if rl.get('kl'):
         raise SystemExit('rl.kl is not supported (no reference model)')
+    if float(rl.get('temperature', 1.0)) != 1.0 or float(rl.get('top_p', 1.0)) != 1.0:
+        raise SystemExit('rl.temperature and rl.top_p must be 1: the policy gradient uses the unmodified log-probabilities')
     kind = rl['prompt_kind']
     recs = load_exports(a.bundle, 'train', [kind], exclude_families=cfg['data'].get('exclude_families'))[kind]
     tables = R.load_tables(os.path.join(a.bundle, 'reward_tables', 'train.jsonl.gz'), roots={r['root_id'] for r in recs})
@@ -173,16 +177,16 @@ def main():
             enc = inputs(processor, a.bundle, rec, G, nested).to(dev)
             torch.manual_seed(hash((a.seed, s, rank, j)) % (2 ** 31))
             with torch.no_grad():
-                gen = model.generate(**enc, do_sample=True, temperature=float(rl['temperature']), top_p=float(rl.get('top_p', 1.0)), top_k=0,
+                gen = model.generate(**enc, do_sample=True, temperature=1.0, top_p=1.0, top_k=0,
                                      max_new_tokens=int(rl['max_new_tokens']), eos_token_id=stop_ids, pad_token_id=pad, use_cache=True)
             comps = [cut(row, stop_ids, pad) for row in gen[:, enc['input_ids'].shape[1]:]]
             scored = [R.reward(tok.decode(c, skip_special_tokens=True), tables[rec['root_id']], rcfg) for c in comps]
             rs = [x[0] for x in scored]
             adv = R.group_advantages(rs, normalize_std=bool(rl.get('normalize_std', True)))
-            if a.smoke and all(x == 0 for x in adv):
-                adv = [1.0 if i % 2 == 0 else -1.0 for i in range(len(adv))]
             st['groups'] += 1
             st['flat_groups'] += all(x == 0 for x in adv)
+            if a.smoke and all(x == 0 for x in adv):
+                adv = [1.0 if i % 2 == 0 else -1.0 for i in range(len(adv))]
             for c, (r, inf), ad in zip(comps, scored, adv):
                 st['reward'] += r
                 st['n'] += 1
@@ -197,11 +201,12 @@ def main():
         keys = list(st)
         tot = sum_across([st[k] for k in keys] + [len(samples)], ws, dev)
         g, n_global = dict(zip(keys, tot)), int(tot[-1])
+        n_all = ws * P * G
         model.train()
         for rec, comp, ad in samples:
             batch, labels = with_completion(inputs(processor, a.bundle, rec, 1, nested), comp, dev)
             sums, cnt = per_sample_ce(model(**batch).logits, labels)
-            (ad * sums[0] / cnt[0].clamp(min=1) / n_global).backward()
+            (ad * sums[0] / cnt[0].clamp(min=1) / n_all).backward()
         gn = 0.0
         if n_global:
             for p in params:

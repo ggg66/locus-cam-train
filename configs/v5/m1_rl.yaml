@@ -1,12 +1,16 @@
-# Method 1, RL with execution rewards: GRPO from the development baseline's final checkpoint (base-s<seed>/ckpt-4).
-# Reward from the outcome table of the training root: satisfied 1, spatially unmet 0.3 x passed checks, illegal 0,
-# no valid action -0.5 (lcam/rewards.py). 200 steps x 8 GPUs x 2 prompts x 8 samples (3200 prompts, ~0.75 passes).
+# Method 1, RL with execution rewards: GRPO from the development baseline's first checkpoint (base-s<seed>/ckpt-1, 25 % of
+# its SFT, ~0.9 passes): the answer format is learned there, but the training roots are not yet memorised. From the final
+# checkpoint (~3.5 passes) nearly every training prompt is already answered correctly by all 8 samples, which gives no
+# advantage and so no learning signal. Reward from the outcome table of the training root: satisfied 1, spatially unmet
+# 0.3 x passed checks, illegal 0, no valid action -0.5 (lcam/rewards.py). 300 steps x 8 GPUs x 2 prompts x 8 samples
+# (4800 prompts, ~1.1 passes over the 4259 development training roots).
 base: common.yaml
 run_family: m1_rl
 init_from: base
+init_checkpoint: ckpt-1
 rl:
   prompt_kind: action_sft
-  steps: 200
+  steps: 300
   prompts_per_rank: 2
   group_size: 8
   temperature: 1.0

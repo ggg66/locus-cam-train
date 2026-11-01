@@ -1,17 +1,19 @@
-# Method 2, stage 2: GRPO from m2_imagact's final checkpoint. Reward = the action reward of method 1 plus 0.5 x the share
-# of correctly imagined outcome fields of the move it made (height / margin within 0.03, blocked / hits within 1, constraint
-# fields exact); no imagination credit without a valid move.
+# Method 2, stage 2: GRPO from m2_imagact's first checkpoint (ckpt-1, for the reason given in m1_rl.yaml). Reward = the
+# action reward of method 1 plus 0.5 x the mean share of correctly imagined outcome fields over the listed candidates with a
+# legal endpoint (height / margin within 0.03, blocked / hits within 1, constraint fields exact); no imagination credit when
+# the chosen move is invalid or not among the candidates (lcam/rewards.py).
 base: common.yaml
 run_family: m2_rl
 init_from: m2_imagact
+init_checkpoint: ckpt-1
 rl:
   prompt_kind: imagact_v5
-  steps: 200
+  steps: 300
   prompts_per_rank: 2
   group_size: 8
   temperature: 1.0
   top_p: 1.0
-  max_new_tokens: 384
+  max_new_tokens: 768
   lr: 1.0e-5
   warmup_steps: 5
   grad_clip: 1.0
@@ -23,6 +25,7 @@ rl:
     illegal: 0.0
     invalid: -0.5
     imagination_weight: 0.5
+    max_candidates: 6
     tolerance: {height: 0.03, margin: 0.03, blocked: 1, hits: 1}
   checkpoints:
     at_fraction: [0.5, 1.0]

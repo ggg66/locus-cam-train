@@ -1,5 +1,8 @@
-# Method 2, stage 1 (SFT): imagine, then act. The V0 prompt verbatim; the answer first states the outcome of the move it
-# makes (consequence_v4 format: per target height, margin, blocked, hits, then the five constraint fields), then the move.
+# Method 2, stage 1 (SFT): propose, imagine, choose. The V0 prompt verbatim; the answer lists four candidate moves (1 that
+# satisfies everything, 3 near misses, in hashed order), each with its measured outcome (consequence_v4 fields: per target
+# height, margin, blocked, hits, then the five constraint fields), and then the chosen move = the candidate whose outcome
+# satisfies everything. Imagining only the move one makes would always describe a success, which carries no information
+# about consequences and cannot steer the choice; here the outcomes differ and the choice follows from them.
 # Roots come in A_base's order (imagact_v5 is aligned with action_sft), 15000 exposures. Stage 2 is m2_rl.yaml.
 base: common.yaml
 run_family: m2_imagact

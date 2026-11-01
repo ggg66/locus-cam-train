@@ -9,9 +9,12 @@ A table line: {root_id, task_id, family_id, two, names, rows: {"+r,+u,+b": {s, p
 
 Action reward (method 1): the action is read with the frozen scorer's parser (lcam.parse, last JSON); satisfied ->
 `satisfied`, spatially unmet -> `partial_max` x passed/evaluated checks, illegal endpoint -> `illegal`, no valid action ->
-`invalid`. Imagination reward (method 2): the action reward plus `imagination_weight` x the share of correctly imagined
-fields of the chosen action's outcome (first JSON with "targets"; the consequence_v4 format), with tolerances on the
-measured quantities. No imagination credit without a valid action, so a format change cannot be rewarded on its own.
+`invalid`.
+Plan reward (method 2, "propose, imagine, choose"): the answer first lists candidate moves, each with its imagined outcome
+(first JSON with a "candidates" list; consequence_v4 fields per candidate), then the chosen move. Reward = action reward +
+`imagination_weight` x the mean share of correctly imagined fields over the candidates whose endpoint is legal (an illegal
+endpoint's outcome is trivial to state, so it earns nothing). No imagination credit when the move is invalid or is not one
+of the listed candidates: the reward pays for imagination that the decision can have used, not for text next to it.
 """
 import gzip
 import json
@@ -80,8 +83,17 @@ def top_level_json(text):
     return out
 
 
-def first_imagination(raw):
-    return next((o for o in top_level_json(raw) if 'targets' in o), None)
+def first_plan(raw):
+    return next((o for o in top_level_json(raw) if isinstance(o.get('candidates'), list)), None)
+
+
+def candidate_key(c):
+    m = c.get('move') if isinstance(c, dict) else None
+    if not (isinstance(m, list) and len(m) == 3 and all(isinstance(x, int) and not isinstance(x, bool) for x in m)):
+        return None
+    if m[0] not in (-2, -1, 0, 1, 2) or m[1] not in (-1, 0, 1, 2) or m[2] not in (-3, -2, -1, 0, 1, 2):
+        return None
+    return KEY % tuple(m)
 
 
 def is_num(x):
@@ -120,8 +132,18 @@ def reward(raw, table, cfg):
     info['imagination'] = None
     if info['key'] is None:
         return r, info
-    pred = first_imagination(raw)
-    acc = imagination_accuracy(pred, table['rows'][info['key']], table['names'], s['tolerance']) if pred else 0.0
+    plan = first_plan(raw)
+    cands = {}
+    for c in (plan or {}).get('candidates', [])[:int(s.get('max_candidates', 6))]:
+        k = candidate_key(c)
+        if k is not None and k not in cands:
+            cands[k] = c
+    info['n_candidates'] = len(cands)
+    info['chosen_in_candidates'] = info['key'] in cands
+    legal = [k for k in cands if table['rows'][k]['f'][0]]
+    acc = 0.0
+    if info['chosen_in_candidates'] and legal:
+        acc = sum(imagination_accuracy(cands[k], table['rows'][k], table['names'], s['tolerance']) for k in legal) / len(legal)
     info['imagination'] = acc
     return r + s['imagination_weight'] * acc, info
 

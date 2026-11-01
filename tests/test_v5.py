@@ -30,8 +30,20 @@ def move(r, u, b):
     return json.dumps({'move_m': {'right': r, 'up': u, 'back': b}})
 
 
-IMAG_OK = json.dumps({'targets': [{'name': '蓝色人物', 'height': 0.47, 'margin': 0.16, 'blocked': 0, 'hits': 9}],
-                      'legal': True, 'in_frame': True, 'size_ok': True, 'unoccluded': True, 'apart': None}, ensure_ascii=False)
+def cand(move, height, margin, blocked, hits, legal=True, in_frame=True, size_ok=True, unoccluded=True):
+    if not legal:
+        return {'move': move, 'targets': [], 'legal': False, 'in_frame': None, 'size_ok': None, 'unoccluded': None, 'apart': None}
+    return {'move': move, 'targets': [{'name': '蓝色人物', 'height': height, 'margin': margin, 'blocked': blocked, 'hits': hits}],
+            'legal': True, 'in_frame': in_frame, 'size_ok': size_ok, 'unoccluded': unoccluded, 'apart': None}
+
+
+GOOD = cand([1, 0, -3], 0.47, 0.16, 0, 9)                                      # truth of +1,+0,-3
+NEAR = cand([0, 0, 0], 0.30, 0.32, 9, 9, size_ok=False, unoccluded=False)       # truth of +0,+0,+0
+ILL = cand([-2, -1, -3], 0, 0, 0, 0, legal=False)                               # truth of -2,-1,-3
+
+
+def plan(*cands):
+    return json.dumps({'candidates': list(cands)}, ensure_ascii=False)
 
 
 class ActionReward(unittest.TestCase):
@@ -43,37 +55,40 @@ class ActionReward(unittest.TestCase):
         self.assertEqual(R.action_reward('no json', t, {})[0], -0.5)
         self.assertEqual(R.action_reward(move(3, 0, 0), t, {})[1]['outcome'], 'out_of_domain')
 
-    def test_last_json_is_the_action(self):   # the frozen parser: an imagination block before the move does not hide it
-        self.assertEqual(R.action_reward(IMAG_OK + '\n' + move(1, 0, -3), table(), {})[0], 1.0)
+    def test_last_json_is_the_action(self):   # the frozen parser: a plan before the move does not hide it
+        self.assertEqual(R.action_reward(plan(GOOD, NEAR) + '\n' + move(1, 0, -3), table(), {})[0], 1.0)
 
 
-class ImaginationReward(unittest.TestCase):
+class PlanReward(unittest.TestCase):
     cfg = {'type': 'imagact', 'imagination_weight': 0.5}
 
-    def test_exact_imagination(self):
-        r, info = R.reward(IMAG_OK + '\n' + move(1, 0, -3), table(), self.cfg)
-        self.assertEqual(info['imagination'], 1.0)
+    def test_exact_plan(self):
+        r, info = R.reward(plan(NEAR, GOOD) + '\n' + move(1, 0, -3), table(), self.cfg)
+        self.assertEqual((info['imagination'], info['n_candidates'], info['chosen_in_candidates']), (1.0, 2, True))
         self.assertAlmostEqual(r, 1.5)
 
     def test_wrong_fields_and_tolerance(self):
-        bad = json.loads(IMAG_OK)
-        bad['targets'][0]['height'] = 0.55      # off by 0.08 > 0.03
-        bad['size_ok'] = False                  # wrong
-        r, info = R.reward(json.dumps(bad, ensure_ascii=False) + '\n' + move(1, 0, -3), table(), self.cfg)
-        self.assertAlmostEqual(info['imagination'], 6 / 8)    # legal, in_frame, size_ok, unoccluded, 4 quantities
+        bad = dict(NEAR, size_ok=True, targets=[dict(NEAR['targets'][0], height=0.40)])   # two wrong fields of eight
+        self.assertAlmostEqual(R.reward(plan(GOOD, bad) + '\n' + move(1, 0, -3), table(), self.cfg)[1]['imagination'], (1 + 6 / 8) / 2)
 
-    def test_illegal_endpoint(self):
-        pred = json.dumps({'targets': [], 'legal': False, 'in_frame': None, 'size_ok': None, 'unoccluded': None, 'apart': None})
-        self.assertEqual(R.reward(pred + '\n' + move(-2, -1, -3), table(), self.cfg)[1]['imagination'], 1.0)
-        self.assertEqual(R.reward(IMAG_OK + '\n' + move(-2, -1, -3), table(), self.cfg)[1]['imagination'], 0.0)
+    def test_illegal_candidates_earn_nothing(self):   # an illegal endpoint is trivial to describe
+        r, info = R.reward(plan(GOOD, ILL) + '\n' + move(1, 0, -3), table(), self.cfg)
+        self.assertEqual(info['imagination'], 1.0)    # mean over the legal candidate only
+        r, info = R.reward(plan(ILL) + '\n' + move(-2, -1, -3), table(), self.cfg)
+        self.assertEqual((r, info['imagination']), (0.0, 0.0))
+
+    def test_choice_must_be_a_candidate(self):
+        r, info = R.reward(plan(GOOD, NEAR) + '\n' + move(1, 0, -2), table() | {'rows': dict(table()['rows'], **{'+1,+0,-2': table()['rows']['+0,+0,+0']})}, self.cfg)
+        self.assertEqual((info['chosen_in_candidates'], info['imagination']), (False, 0.0))
 
     def test_no_credit_without_a_valid_move(self):
-        r, info = R.reward(IMAG_OK, table(), self.cfg)
-        self.assertEqual(r, -0.5)
-        self.assertIsNone(info['imagination'])
+        r, info = R.reward(plan(GOOD), table(), self.cfg)
+        self.assertEqual((r, info['imagination']), (-0.5, None))
 
-    def test_missing_imagination(self):
-        self.assertEqual(R.reward(move(1, 0, -3), table(), self.cfg), (1.0, {'outcome': 'satisfied', 'key': '+1,+0,-3', 'imagination': 0.0}))
+    def test_bad_candidate_moves_are_ignored(self):
+        junk = dict(GOOD, move=[9, 0, 0])
+        r, info = R.reward(plan(junk, GOOD, GOOD) + '\n' + move(1, 0, -3), table(), self.cfg)
+        self.assertEqual(info['n_candidates'], 1)
 
 
 class Advantages(unittest.TestCase):
@@ -117,7 +132,8 @@ class Configs(unittest.TestCase):
         self.assertEqual(C.load(os.path.join(CFG, 'm4_multi.yaml'))['data']['target_choice'], 'robust_set')
         for f, init, kind in (('m1_rl', 'base', 'action'), ('m2_rl', 'm2_imagact', 'imagact')):
             c = C.load(os.path.join(CFG, f'{f}.yaml'))
-            self.assertEqual((c['init_from'], c['rl']['reward']['type']), (init, kind))
+            self.assertEqual((c['init_from'], c['init_checkpoint'], c['rl']['reward']['type']), (init, 'ckpt-1', kind))
+            self.assertEqual((c['rl']['temperature'], c['rl']['top_p']), (1.0, 1.0))
             self.assertFalse(c['rl'].get('kl'))
 
 

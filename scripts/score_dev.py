@@ -102,12 +102,18 @@ def main():
                 e[f'{part}_minus_{a.baseline}'] = round(sum(d) / len(d), 4)
                 e[f'{part}_ci95'] = boot(d)
         out['methods'][m] = e
+    if a.baseline in out['methods']:
+        b = out['methods'][a.baseline]
+        out['dev_split_gap'] = round(b['seen_success'] - b['held_success'], 4)   # does the development split measure transfer?
     json.dump(out, open(a.out, 'w'), ensure_ascii=False, indent=1)
     lines = [f'| method | runs | held-out dev families | vs {a.baseline} (95% CI) | seen families | vs {a.baseline} |', '|---|---:|---:|---|---:|---|']
     for m, e in out['methods'].items():
         ci = f'{100 * e["held_minus_" + a.baseline]:+.1f} [{100 * e["held_ci95"][0]:+.1f}, {100 * e["held_ci95"][1]:+.1f}]' if f'held_minus_{a.baseline}' in e else '—'
         sv = f'{100 * e["seen_minus_" + a.baseline]:+.1f}' if f'seen_minus_{a.baseline}' in e else '—'
         lines.append(f'| {m} | {len(e["runs"])} | {100 * e["held_success"]:.1f} | {ci} | {100 * e["seen_success"]:.1f} | {sv} |')
+    if 'dev_split_gap' in out:
+        lines += ['', f'{a.baseline}: seen families minus held-out development families = {100 * out["dev_split_gap"]:+.1f} points '
+                  '(the development split stands in for held-out structures only if this gap is large; on the test set it is ~55).']
     open(os.path.splitext(a.out)[0] + '.md', 'w').write('\n'.join(lines) + '\n')
     print('\n'.join(lines))
 

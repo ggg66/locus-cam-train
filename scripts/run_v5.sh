@@ -121,11 +121,12 @@ train_sft() {   # train_sft <config name>: every seed of SEEDS on this node
   done
 }
 
-train_rl() {    # train_rl <config name> <init run family>
-  local f=$1 init=$2 s ck
+train_rl() {    # train_rl <config name> <init run family>: starts from the checkpoint named by init_checkpoint in the config
+  local f=$1 init=$2 s ck which
+  which=$("$PY" -c "import sys; sys.path.insert(0, '.'); from lcam import config as C; print(C.load('configs/v5/$f.yaml')['init_checkpoint'])")
   for s in $SEEDS; do
     finished "$f-s$s" && { echo "-- $f-s$s finished earlier"; continue; }
-    ck=$(last_ckpt "$init-s$s"); [ -n "$ck" ] || fail "no checkpoint of $init-s$s to start $f from"
+    ck=$RUNS/$init-s$s/checkpoints/$which; [ -d "$ck" ] || fail "no $which of $init-s$s to start $f from"
     echo "== train $f-s$s from $ck $(date '+%F %T')"
     launch/launch_grpo.sh "configs/v5/$f.yaml" "$s" "$ck" 29740 > "$LOCUS_ROOT/work/logs/v5-$f-s$s.log" 2>&1 || fail "training $f-s$s failed (work/logs/v5-$f-s$s.log)"
     finished "$f-s$s" || fail "$f-s$s ended without finishing"
@@ -149,8 +150,9 @@ evaluate() {    # evaluate <run family...>: final checkpoint of every seed on bo
   : > "$tasks"
   for f in "$@"; do for s in $SEEDS; do
     ck=$(last_ckpt "$f-s$s"); [ -n "$ck" ] || fail "no checkpoint of $f-s$s"
-    for k in 0 1 2 3 4 5 6 7; do printf '%s\t%s\t%s\t0\t1\t512\n' "$OUTS/$f-s$s/dev_heldfam.part$k.jsonl" "$W/prompts/dev_heldfam-$k.jsonl" "${ck#$LOCUS_ROOT/}" >> "$tasks"; done
-    for k in 0 1 2 3; do printf '%s\t%s\t%s\t0\t1\t512\n' "$OUTS/$f-s$s/dev_seen.part$k.jsonl" "$W/prompts/dev_seen-$k.jsonl" "${ck#$LOCUS_ROOT/}" >> "$tasks"; done
+    mx=512; case $f in m2_*) mx=1024 ;; esac          # method 2 writes four imagined candidates before the move
+    for k in 0 1 2 3 4 5 6 7; do printf '%s\t%s\t%s\t0\t1\t%s\n' "$OUTS/$f-s$s/dev_heldfam.part$k.jsonl" "$W/prompts/dev_heldfam-$k.jsonl" "${ck#$LOCUS_ROOT/}" "$mx" >> "$tasks"; done
+    for k in 0 1 2 3; do printf '%s\t%s\t%s\t0\t1\t%s\n' "$OUTS/$f-s$s/dev_seen.part$k.jsonl" "$W/prompts/dev_seen-$k.jsonl" "${ck#$LOCUS_ROOT/}" "$mx" >> "$tasks"; done
   done; done
   local left=0
   while IFS=$'\t' read -r out _; do [ -e "$LOCUS_ROOT/$out.done" ] || left=$((left+1)); done < "$tasks"
