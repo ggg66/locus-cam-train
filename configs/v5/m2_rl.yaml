@@ -17,7 +17,7 @@ rl:
   lr: 1.0e-5
   warmup_steps: 5
   grad_clip: 1.0
-  normalize_std: true
+  normalize_std: false       # advantage = reward difference, so a tiny imagination difference does not count like a success
   reward:
     type: imagact
     satisfied: 1.0
@@ -26,6 +26,7 @@ rl:
     invalid: -0.5
     imagination_weight: 0.5
     max_candidates: 6
+    min_legal_candidates: 2
     tolerance: {height: 0.03, margin: 0.03, blocked: 1, hits: 1}
   checkpoints:
     at_fraction: [0.5, 1.0]

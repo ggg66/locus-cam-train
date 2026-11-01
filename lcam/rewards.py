@@ -13,8 +13,9 @@ Action reward (method 1): the action is read with the frozen scorer's parser (lc
 Plan reward (method 2, "propose, imagine, choose"): the answer first lists candidate moves, each with its imagined outcome
 (first JSON with a "candidates" list; consequence_v4 fields per candidate), then the chosen move. Reward = action reward +
 `imagination_weight` x the mean share of correctly imagined fields over the candidates whose endpoint is legal (an illegal
-endpoint's outcome is trivial to state, so it earns nothing). No imagination credit when the move is invalid or is not one
-of the listed candidates: the reward pays for imagination that the decision can have used, not for text next to it.
+endpoint's outcome is trivial to state, so it earns nothing). No imagination credit when the move is invalid, is not one of
+the listed candidates, or fewer than `min_legal_candidates` legal ones are listed: the reward pays for imagination the decision
+can have used to compare moves, not for text next to it.
 """
 import gzip
 import json
@@ -142,7 +143,7 @@ def reward(raw, table, cfg):
     info['chosen_in_candidates'] = info['key'] in cands
     legal = [k for k in cands if table['rows'][k]['f'][0]]
     acc = 0.0
-    if info['chosen_in_candidates'] and legal:
+    if info['chosen_in_candidates'] and len(legal) >= int(s.get('min_legal_candidates', 2)):
         acc = sum(imagination_accuracy(cands[k], table['rows'][k], table['names'], s['tolerance']) for k in legal) / len(legal)
     info['imagination'] = acc
     return r + s['imagination_weight'] * acc, info

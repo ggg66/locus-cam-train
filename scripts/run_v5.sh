@@ -11,8 +11,10 @@
 #
 # Shared stages run once, at the first call: setup (add-on, files, model type), unit, check (real processor on the new
 # sources), smoke (tiny random model through SFT, GRPO, inference and scoring on one GPU), base (the development
-# baseline = A_base without the development families; every method is compared with it). Training uses the 8 GPUs of this
-# node; evaluation uses NODES (one IP per line) if set, else this node. SEEDS (default "0") lists the seeds.
+# baseline = A_base without the development families; every method is compared with it). NODES (a file with one IP per line)
+# lists the free nodes, default this node only: the seeds of a run go to different nodes in parallel (8 GPUs each), and
+# evaluation shares all of them. SEEDS (default "0 1 2") lists the seeds: differences between seeds of one method reach 8
+# points, so one seed cannot tell methods apart. Base and method 2 are also evaluated at the checkpoint RL starts from.
 # Finished runs and evaluations are skipped, so after a stop fix the cause and run the same command again.
 # Results: $LOCUS_ROOT/work/v5/dev_summary.md (held-out development families and seen families, each method vs base).
 set -euo pipefail
@@ -25,7 +27,7 @@ W=$LOCUS_ROOT/work/v5
 ST=$W/stages
 RUNS=$LOCUS_ROOT/work/runs/v5
 OUTS=work/outputs/v5
-SEEDS=${SEEDS:-0}
+SEEDS=${SEEDS:-0 1 2}
 mkdir -p "$W" "$ST" "$RUNS" "$LOCUS_ROOT/work/logs"
 exec > >(tee -a "$W/run_$METHOD.log") 2>&1
 for r in ${REDO:-}; do rm -f "${ST:?}/${r:?}.ok"; done
@@ -49,7 +51,8 @@ do_setup() {
   if [ -n "${ADDON_TAR:-}" ]; then
     : "${ADDON_SHA256:?set ADDON_SHA256 with ADDON_TAR}"
     echo "$ADDON_SHA256  $ADDON_TAR" | sha256sum -c - || fail 'add-on sha256 differs'
-    tar -xf "$ADDON_TAR" -C "$BUNDLE" --keep-old-files 2>/dev/null || true
+    tar -xf "$ADDON_TAR" -C "$BUNDLE" || fail 'could not extract the add-on'     # its own files only: a newer version replaces an older one
+    echo "$ADDON_SHA256" > "$W/addon.sha256"
   fi
   for m in "$BUNDLE"/ADDON_*_MANIFEST.json; do
     [ -f "$m" ] || continue
@@ -111,27 +114,56 @@ do_smoke() {
   echo "smoke passed"
 }
 
-train_sft() {   # train_sft <config name>: every seed of SEEDS on this node
-  local f=$1 s
-  for s in $SEEDS; do
-    finished "$f-s$s" && { echo "-- $f-s$s finished earlier"; continue; }
-    echo "== train $f-s$s $(date '+%F %T')"
-    launch/launch_run_v2.sh "configs/v5/$f.yaml" "$s" 29640 > "$LOCUS_ROOT/work/logs/v5-$f-s$s.log" 2>&1 || fail "training $f-s$s failed (work/logs/v5-$f-s$s.log)"
-    finished "$f-s$s" || fail "$f-s$s ended without finishing"
-  done
+node_list() {
+  if [ -n "${NODES:-}" ]; then grep -v '^#' "$NODES" | awk 'NF {print $1}'; else echo "$SELF_IP"; fi
 }
 
-train_rl() {    # train_rl <config name> <init run family>: starts from the checkpoint named by init_checkpoint in the config
-  local f=$1 init=$2 s ck which
-  which=$("$PY" -c "import sys; sys.path.insert(0, '.'); from lcam import config as C; print(C.load('configs/v5/$f.yaml')['init_checkpoint'])")
-  for s in $SEEDS; do
-    finished "$f-s$s" && { echo "-- $f-s$s finished earlier"; continue; }
-    ck=$RUNS/$init-s$s/checkpoints/$which; [ -d "$ck" ] || fail "no $which of $init-s$s to start $f from"
-    echo "== train $f-s$s from $ck $(date '+%F %T')"
-    launch/launch_grpo.sh "configs/v5/$f.yaml" "$s" "$ck" 29740 > "$LOCUS_ROOT/work/logs/v5-$f-s$s.log" 2>&1 || fail "training $f-s$s failed (work/logs/v5-$f-s$s.log)"
-    finished "$f-s$s" || fail "$f-s$s ended without finishing"
-  done
+on_node() {     # on_node <ip> <log> <command...>: run a launch script there and return when it ends
+  local ip=$1 log=$2 cmd; shift 2
+  if [ "$ip" = "$SELF_IP" ]; then "$@" > "$log" 2>&1; return; fi
+  printf -v cmd '%q ' "$@"
+  printf -v cmd 'cd %q && LOCUS_ROOT=%q LCAM_ROUND=%q LCAM_MODEL=%q LCAM_CODE=%q BUNDLE=%q PY=%q SELF_IP=%q %s > %q 2>&1' \
+    "$LCAM_CODE" "$LOCUS_ROOT" "$LCAM_ROUND" "$LCAM_MODEL" "$LCAM_CODE" "$BUNDLE" "$PY" "$ip" "$cmd" "$log"
+  ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o BatchMode=yes "$ip" "$cmd" </dev/null
 }
+
+run_seeds() {   # run_seeds <run family> <launcher: launch_one <seed> <ip>>: one run per node at a time
+  local f=$1 launcher=$2 s p n=0 failed=""; local -a nodes todo pids     # pids: a plain `wait` would also wait for the log's tee
+  mapfile -t nodes < <(node_list)
+  for s in $SEEDS; do
+    if finished "$f-s$s"; then echo "-- $f-s$s finished earlier"; else todo+=("$s"); fi
+  done
+  for s in ${todo[@]+"${todo[@]}"}; do
+    echo "== train $f-s$s on ${nodes[n]} $(date '+%F %T')"
+    "$launcher" "$s" "${nodes[n]}" &
+    pids+=($!)
+    n=$((n+1))
+    if [ "$n" = "${#nodes[@]}" ]; then
+      for p in "${pids[@]}"; do wait "$p" || true; done
+      pids=(); n=0
+    fi
+  done
+  for p in ${pids[@]+"${pids[@]}"}; do wait "$p" || true; done
+  for s in ${todo[@]+"${todo[@]}"}; do finished "$f-s$s" || failed="$failed $f-s$s"; done
+  [ -z "$failed" ] || fail "training ended without finishing:$failed (work/logs/v5-<run>.log)"
+}
+
+train_sft() {   # train_sft <config name>
+  SFT_F=$1
+  run_seeds "$1" one_sft
+}
+one_sft() { on_node "$2" "$LOCUS_ROOT/work/logs/v5-$SFT_F-s$1.log" launch/launch_run_v2.sh "configs/v5/$SFT_F.yaml" "$1" 29640; }
+
+train_rl() {    # train_rl <config name> <init run family>: starts from the checkpoint named by init_checkpoint in the config
+  local s
+  RL_F=$1; RL_INIT=$2
+  RL_CK=$("$PY" -c "import sys; sys.path.insert(0, '.'); from lcam import config as C; print(C.load('configs/v5/$1.yaml')['init_checkpoint'])")
+  for s in $SEEDS; do
+    finished "$1-s$s" || [ -d "$RUNS/$2-s$s/checkpoints/$RL_CK" ] || fail "no $RL_CK of $2-s$s to start $1 from"
+  done
+  run_seeds "$1" one_rl
+}
+one_rl() { on_node "$2" "$LOCUS_ROOT/work/logs/v5-$RL_F-s$1.log" launch/launch_grpo.sh "configs/v5/$RL_F.yaml" "$1" "$RUNS/$RL_INIT-s$1/checkpoints/$RL_CK" 29740; }
 
 shards() {      # development prompts cut into shards, one inference job each
   local p=$1 n=$2
@@ -144,29 +176,36 @@ for k in range($n):
     open('$W/prompts/$p-%d.jsonl' % k, 'w', encoding='utf-8').write(''.join(l + '\n' for l in lines[k::$n]))"
 }
 
-evaluate() {    # evaluate <run family...>: final checkpoint of every seed on both development prompt sets
-  local tasks=$W/tasks-eval-$METHOD.txt f s ck k
+evaluate() {    # evaluate <run family[@checkpoint]...>: final (or the named) checkpoint of every seed on both prompt sets
+  local tasks=$W/tasks-eval-$METHOD.txt item f at label s ck k
   shards dev_heldfam 8; shards dev_seen 4
   : > "$tasks"
-  for f in "$@"; do for s in $SEEDS; do
-    ck=$(last_ckpt "$f-s$s"); [ -n "$ck" ] || fail "no checkpoint of $f-s$s"
-    mx=512; case $f in m2_*) mx=1024 ;; esac          # method 2 writes four imagined candidates before the move
-    for k in 0 1 2 3 4 5 6 7; do printf '%s\t%s\t%s\t0\t1\t%s\n' "$OUTS/$f-s$s/dev_heldfam.part$k.jsonl" "$W/prompts/dev_heldfam-$k.jsonl" "${ck#$LOCUS_ROOT/}" "$mx" >> "$tasks"; done
-    for k in 0 1 2 3; do printf '%s\t%s\t%s\t0\t1\t%s\n' "$OUTS/$f-s$s/dev_seen.part$k.jsonl" "$W/prompts/dev_seen-$k.jsonl" "${ck#$LOCUS_ROOT/}" "$mx" >> "$tasks"; done
-  done; done
+  for item in "$@"; do
+    f=${item%@*}; at=""; label=$f
+    if [ "$item" != "$f" ]; then at=${item#*@}; label=${f}_at_$at; fi
+    for s in $SEEDS; do
+      if [ -n "$at" ]; then ck=$RUNS/$f-s$s/checkpoints/$at; [ -d "$ck" ] || fail "no $at of $f-s$s"
+      else ck=$(last_ckpt "$f-s$s"); [ -n "$ck" ] || fail "no checkpoint of $f-s$s"; fi
+      mx=512; case $f in m2_*) mx=1024 ;; esac          # method 2 writes four imagined candidates before the move
+      for k in 0 1 2 3 4 5 6 7; do printf '%s\t%s\t%s\t0\t1\t%s\n' "$OUTS/$label-s$s/dev_heldfam.part$k.jsonl" "$W/prompts/dev_heldfam-$k.jsonl" "${ck#$LOCUS_ROOT/}" "$mx" >> "$tasks"; done
+      for k in 0 1 2 3; do printf '%s\t%s\t%s\t0\t1\t%s\n' "$OUTS/$label-s$s/dev_seen.part$k.jsonl" "$W/prompts/dev_seen-$k.jsonl" "${ck#$LOCUS_ROOT/}" "$mx" >> "$tasks"; done
+    done
+  done
   local left=0
   while IFS=$'\t' read -r out _; do [ -e "$LOCUS_ROOT/$out.done" ] || left=$((left+1)); done < "$tasks"
   [ "$left" = 0 ] && { echo "-- evaluation of $* done earlier"; return; }
   local nodes=${NODES:-}
   if [ -z "$nodes" ]; then nodes=$W/nodes-self.txt; echo "$SELF_IP" > "$nodes"; fi
   rm -rf "$LOCUS_ROOT/work/claims/$(basename "$tasks" .txt)"
+  local flog=$LOCUS_ROOT/work/logs/infer/failures.log f0=0            # only failures of this attempt count
+  [ -f "$flog" ] && f0=$(wc -l < "$flog")
   launch/run_infer_pool.sh "$tasks" "$nodes"
   while true; do
     left=0
     while IFS=$'\t' read -r out _; do
       [ -e "$LOCUS_ROOT/$out.done" ] && continue
       left=$((left+1))
-      grep -qF "FAILED $out " "$LOCUS_ROOT/work/logs/infer/failures.log" 2>/dev/null && fail "inference failed: $out (work/logs/infer/failures.log)"
+      [ -f "$flog" ] && tail -n +$((f0+1)) "$flog" | grep -qF "FAILED $out " && fail "inference failed: $out (work/logs/infer/failures.log)"
     done < "$tasks"
     [ "$left" = 0 ] && break
     echo "$(date +%T) $left evaluation jobs left"; sleep 60
@@ -177,6 +216,8 @@ score() {
   "$PY" scripts/score_dev.py --bundle "$BUNDLE" --outputs "$LOCUS_ROOT/$OUTS" --out "$W/dev_summary.json" || fail 'scoring failed'
 }
 
+# a new add-on must be extracted even if an earlier one already passed setup
+if [ -n "${ADDON_SHA256:-}" ] && [ "$ADDON_SHA256" != "$(cat "$W/addon.sha256" 2>/dev/null)" ]; then rm -f "${ST:?}/setup.ok"; fi
 once setup do_setup
 once unit do_unit
 once check do_check
@@ -184,8 +225,8 @@ once smoke do_smoke
 train_sft base
 evaluate base
 case $METHOD in
-  m1) train_rl m1_rl base; evaluate m1_rl ;;
-  m2) train_sft m2_imagact; evaluate m2_imagact; train_rl m2_rl m2_imagact; evaluate m2_rl ;;
+  m1) evaluate base@ckpt-1; train_rl m1_rl base; evaluate m1_rl ;;          # base@ckpt-1: what RL starts from (an earlier stop on its own)
+  m2) train_sft m2_imagact; evaluate m2_imagact m2_imagact@ckpt-1; train_rl m2_rl m2_imagact; evaluate m2_rl ;;
   m3) train_sft m3_inverse; evaluate m3_inverse ;;
   m4) train_sft m4_multi; evaluate m4_multi ;;
 esac

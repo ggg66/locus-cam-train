@@ -73,7 +73,10 @@ class PlanReward(unittest.TestCase):
 
     def test_illegal_candidates_earn_nothing(self):   # an illegal endpoint is trivial to describe
         r, info = R.reward(plan(GOOD, ILL) + '\n' + move(1, 0, -3), table(), self.cfg)
-        self.assertEqual(info['imagination'], 1.0)    # mean over the legal candidate only
+        self.assertEqual(info['imagination'], 0.0)    # one legal candidate is no comparison
+        far = cand([1, 0, -2], 0.3, 0.3, 9, 9)        # truth of +1,+0,-2 below
+        tb = table() | {'rows': dict(table()['rows'], **{'+1,+0,-2': table()['rows']['+0,+0,+0']})}
+        self.assertEqual(R.reward(plan(GOOD, ILL, dict(far, size_ok=False, unoccluded=False)) + '\n' + move(1, 0, -3), tb, self.cfg)[1]['imagination'], 1.0)    # mean over the legal ones
         r, info = R.reward(plan(ILL) + '\n' + move(-2, -1, -3), table(), self.cfg)
         self.assertEqual((r, info['imagination']), (0.0, 0.0))
 
@@ -88,7 +91,7 @@ class PlanReward(unittest.TestCase):
     def test_bad_candidate_moves_are_ignored(self):
         junk = dict(GOOD, move=[9, 0, 0])
         r, info = R.reward(plan(junk, GOOD, GOOD) + '\n' + move(1, 0, -3), table(), self.cfg)
-        self.assertEqual(info['n_candidates'], 1)
+        self.assertEqual((info['n_candidates'], info['imagination']), (1, 0.0))
 
 
 class Advantages(unittest.TestCase):
