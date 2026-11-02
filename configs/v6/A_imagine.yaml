@@ -1,0 +1,13 @@
+# Imagine, then act (v5 m2_imagact, chosen on the development split): the V0 prompt verbatim; the answer lists four candidate
+# moves (1 that satisfies everything, 3 near misses, in hashed order), each with its measured outcome, then the chosen move.
+# Same 15000 exposures and root order as A_base (imagact_v5 is aligned with action_sft); no RL stage. The frozen scorer reads
+# the last JSON, which is the move.
+base: common.yaml
+run_family: A_imagine
+anchor: imagact_v5
+pool_streams:
+  imagact_v5: action_sft
+exposures:
+  imagact_v5: 15000
+probe_kinds: [imagact_v5]
+eval_min_new_tokens: 1024    # four imagined candidates come before the move (as in the v5 evaluation)
