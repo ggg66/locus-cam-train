@@ -39,7 +39,7 @@ LOCUS_ROOT=/共享盘/项目目录 NODES=$LOCUS_ROOT/work/v6/nodes.txt AIHUB_API
 ```
 
 - `NODES`：每行一个节点 IP，运行命令的节点也要写进去。每个节点一次跑一个训练，9 次训练按节点数分批；推理分到所有节点。
-- `AIHUB_API_KEY`：设置后，一线模型诊断（`scripts/run_api_diagnostics.py`）在后台同时跑，结果一起打包；已经跑完（存在 `work/api_diag.tar.gz`）就跳过。不设置就不跑。
+- `AIHUB_API_KEY`：必须设置，一线模型诊断（`scripts/run_api_diagnostics.py`）在后台同时跑，结果一起打包；已经跑完（存在 `work/api_diag.tar.gz`）就跳过。没有 key 又没跑完时脚本会停下，确实不跑才设 `SKIP_API=1`。
 - 步骤：核对文件和数据对齐、生成 `propose_v6`、单元测试、用两个底座的真实处理器检查全部训练数据、训练、验证集选检查点、测试（每次训练和两个底座的 B0 各跑一遍 v2 的整套测试题；B0 与之前同底座的 B0 对照，核对推理环境没有变）、C1/C2、打包。推理批量 1，和对照组相同。
 - 时间：Qwen 每次训练约 30 分钟，Gemma 约 2 小时；推理约 4 万条。8 个节点大约一天内跑完。
 - 中途停下，修好原因后运行同一条命令，已完成的步骤会跳过。
@@ -51,4 +51,4 @@ LOCUS_ROOT=/共享盘/项目目录 NODES=$LOCUS_ROOT/work/v6/nodes.txt AIHUB_API
 
 - 两个底座的全部测试、验证、C1/C2 答案和训练记录，检查点的 sha256（不含权重，检查点先保留在服务器上）；
 - v5 的原始答案、训练记录、`runtime_fixes/`，以及代码目录里未提交的改动（`code_diff.patch`、`code_untracked.tar.gz`）；
-- 一线模型诊断的结果包（设置了 `AIHUB_API_KEY` 时）。
+- 一线模型诊断的结果包。

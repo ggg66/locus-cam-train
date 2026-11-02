@@ -50,7 +50,8 @@ elif [ -n "${AIHUB_API_KEY:-}" ]; then
   echo "== hosted-model diagnostics started in the background (work/api_diag/, log work/v6/api_diag.log)"
   "$PY" -u scripts/run_api_diagnostics.py --bundle "$BUNDLE" --v0 "$LOCUS_ROOT/work/api" --out "$LOCUS_ROOT/work/api_diag" --gateway aihub >> "$W/api_diag.log" 2>&1 &
   API_PID=$!; echo "$API_PID" > "$W/api_diag.pid"
-else echo "-- AIHUB_API_KEY not set: the hosted-model diagnostics are not run by this command"; fi
+elif [ "${SKIP_API:-0}" = 1 ]; then echo "-- SKIP_API=1: the hosted-model diagnostics are left out of this run"
+else fail "set AIHUB_API_KEY: the hosted-model diagnostics belong to this run (SKIP_API=1 leaves them out)"; fi
 
 do_setup() {
   "$PY" -c "import sys, transformers, peft, torch; from transformers.models.auto.configuration_auto import CONFIG_MAPPING as M; print('transformers', transformers.__version__, 'peft', peft.__version__, 'torch', torch.__version__); sys.exit(0 if 'qwen3_5_moe' in M and 'gemma4' in M else 1)" \
