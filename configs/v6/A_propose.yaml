@@ -1,0 +1,12 @@
+# Ablation of A_imagine, fixed before the run: the same records, the same four candidate moves in the same order and the same
+# chosen move, without the imagined outcomes (propose_v6, built on the server by scripts/make_propose_v6.py). A_imagine minus
+# A_propose is what imagining the outcomes adds beyond listing candidates and the longer answer.
+base: common.yaml
+run_family: A_propose
+anchor: propose_v6
+pool_streams:
+  propose_v6: action_sft
+exposures:
+  propose_v6: 15000
+probe_kinds: [propose_v6]
+eval_min_new_tokens: 1024    # the same cap as A_imagine

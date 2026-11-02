@@ -12,7 +12,8 @@ import random
 
 ALLOWED = {'action_sft', 'geometry_sft', 'geometry_sft_v2',     # never outcome_records or geometry_sft_privileged
            'consequence_v4', 'geomact_v4', 'nextview_v4',   # v4 supervision study (training_exports/export_v4.py)
-           'imagact_v5', 'inverse_v5'}                      # v5 method study (training_exports/export_v5.py)
+           'imagact_v5', 'inverse_v5',                      # v5 method study (training_exports/export_v5.py)
+           'propose_v6'}                                    # v6 ablation: imagact_v5 without the outcomes (scripts/make_propose_v6.py)
 
 
 def read_jsonl(path):
