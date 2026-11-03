@@ -9,6 +9,8 @@ submission format of the benchmark scorer. Test answers are scored on the benchm
 here); validation answers can be scored here with scripts/select_checkpoint.py. Decoding is greedy, so repeated
 samples of the same prompt are identical; that is recorded, not counted as independent samples.
 Each line also records `seconds`: wall time of its generate() call (with --batch 1, the time of that one answer).
+A prompt item may carry `assistant_prefix`: text placed at the start of the assistant turn, which the model continues;
+`raw` then holds only the continuation.
 """
 import argparse
 import json
@@ -60,7 +62,8 @@ def main():
             for it in chunk:
                 user = [{'type': 'image', 'image': p} for p in it['images']] + [{'type': 'text', 'text': it['prompt']}]
                 msgs = [{'role': 'system', 'content': [{'type': 'text', 'text': it['system']}]}, {'role': 'user', 'content': user}]
-                texts.append(prompt_text(processor, msgs, enable_thinking=a.thinking))
+                # an optional assistant_prefix is placed where the model's own answer starts, as the targets were in training
+                texts.append(prompt_text(processor, msgs, enable_thinking=a.thinking) + it.get('assistant_prefix', ''))
                 if nested:
                     images.append(load_images(a.bundle, it))
                 else:

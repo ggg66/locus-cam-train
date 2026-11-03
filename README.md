@@ -2,6 +2,8 @@
 
 > **国际一线模型零样本评测（只推理）**：`scripts/run_api_models.py`，模型清单、费用和用法见 [docs/api_frontier/README.md](docs/api_frontier/README.md)。
 >
+> **v7（只推理，不训练：同一微调模型拿到真实几何、完整几何路线、动作是否跟随答案里的几何）**：操作说明见 [docs/v7/README.md](docs/v7/README.md)，一条命令 `scripts/run_v7.sh`，只用已有检查点。
+>
 > **v6（最终测试：先想象再挪动、去掉想象结果的消融、Gemma 复现，全部训练族训练，冻结测试集只测一次）**：操作说明见 [docs/v6/README.md](docs/v6/README.md)，一条命令 `scripts/run_v6.sh`，配置在 `configs/v6/`、`configs/v6_gemma/`。
 >
 > **v5（方法开发：强化学习、先想象再行动、逆向想象、多解标签，在开发集上比较）**：操作说明见 [docs/v5/README.md](docs/v5/README.md)，依次运行 `scripts/run_v5.sh m1`、`m2`、`m3`、`m4`，配置在 `configs/v5/`。
