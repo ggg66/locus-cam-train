@@ -14,7 +14,11 @@
 先跑完 v7（`run_v7.sh` 会把 v7 增量包解进数据包；v8 的探针要用到它）。然后：
 
 ```bash
-LOCUS_ROOT=/共享盘/项目目录 NODES=$LOCUS_ROOT/work/v8/nodes.txt nohup scripts/run_v8.sh > /dev/null 2>&1 &
+export LOCUS_ROOT=/共享盘/项目目录
+```
+
+```bash
+NODES=$LOCUS_ROOT/work/v8/nodes.txt nohup scripts/run_v8.sh > /dev/null 2>&1 &
 ```
 
 - 步骤：核对环境和文件；单元测试；用真实处理器检查两种训练数据；训练 6 次（每个节点一次跑一个）；验证集选检查点（另报）；v2 整套测试题（每次训练和 B0，B0 与 v2 的 B0 对照，核对推理环境没变）；C1/C2；v7 的探针（S 题、改名题，A_cons_full 加后果探针）；打包。

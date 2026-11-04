@@ -27,7 +27,11 @@ v7 不训练任何模型，只在 v2、v3_gemma、v4、v6、v6_gemma 已经训�
 ## 一条命令跑完
 
 ```bash
-LOCUS_ROOT=/共享盘/项目目录 NODES=$LOCUS_ROOT/work/v7/nodes.txt ADDON_TAR=$LOCUS_ROOT/data/locus-bundle-v1.7.0-addon-v7.tar ADDON_SHA256=8f7c617abef177d42a48c66edb7fb115e20f91f6f5d784b0d846b112cb385669 nohup scripts/run_v7.sh > /dev/null 2>&1 &
+export LOCUS_ROOT=/共享盘/项目目录
+```
+
+```bash
+NODES=$LOCUS_ROOT/work/v7/nodes.txt ADDON_TAR=$LOCUS_ROOT/data/locus-bundle-v1.7.0-addon-v7.tar ADDON_SHA256=8f7c617abef177d42a48c66edb7fb115e20f91f6f5d784b0d846b112cb385669 nohup scripts/run_v7.sh > /dev/null 2>&1 &
 ```
 
 - `NODES`：每行一个节点 IP，运行命令的节点也要写进去。推理分到所有节点的所有 GPU。
