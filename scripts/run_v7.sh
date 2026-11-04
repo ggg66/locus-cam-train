@@ -5,6 +5,10 @@
 #   geometry   the Action+Geometry runs of both bases write geometry for all 600 test scenes (the full geometry route)
 #   prefix     the Geometry->Action runs continue an answer that starts with the true geometry, or with that geometry
 #              mirrored left-right, on all 600 test scenes (does the action follow the geometry the answer states?)
+#   rename     every run on the 200 held-out-family tasks with the four object names absent from training replaced by
+#              training names (are new names part of the gap?)
+#   probe      the Action+Consequence runs judge single candidates in their own training format: the 12 panel moves of
+#              the 120 diagnostic scenes and the 2,330 validation prompts (was the auxiliary task learned, and does it transfer?)
 #
 #   LOCUS_ROOT=/shared/project NODES=/shared/project/work/v7/nodes.txt ADDON_TAR=.../locus-bundle-v1.7.0-addon-v7.tar \
 #     ADDON_SHA256=<sha> nohup scripts/run_v7.sh > /dev/null 2>&1 &
@@ -44,7 +48,8 @@ do_setup() {
   fi
   "$PY" -c "import json,hashlib,sys; b='$BUNDLE'; m=json.load(open(b+'/ADDON_V7_MANIFEST.json')); bad=[p for p,h in m['files'].items() if hashlib.sha256(open(b+'/'+p,'rb').read()).hexdigest()!=h]; print('add-on v7', len(m['files']), 'files, bad', bad); sys.exit(1 if bad else 0)" \
     || fail 'add-on v7 missing or changed (ADDON_TAR / ADDON_SHA256)'
-  for f in eval_prompts/test_diagnostic_S.jsonl eval_prompts/test_geom_predict.jsonl eval_prompts/test_geomact_true.jsonl eval_prompts/test_geomact_mirror.jsonl; do
+  for f in eval_prompts/test_diagnostic_S.jsonl eval_prompts/test_geom_predict.jsonl eval_prompts/test_geomact_true.jsonl eval_prompts/test_geomact_mirror.jsonl \
+           eval_prompts/test_V0_renamed_heldout.jsonl eval_prompts/test_cons_panel.jsonl eval_prompts/validation_cons.jsonl; do
     [ -f "$BUNDLE/$f" ] || fail "$BUNDLE/$f missing"
   done
   "$PY" -c "import json,sys; c=json.load(open('$GEMMA/config.json')); sys.exit(0 if c['model_type']=='gemma4' else 1)" || fail "$GEMMA is not Gemma 4 31B (set GEMMA_MODEL)"

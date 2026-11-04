@@ -1,0 +1,9 @@
+# Multiple feasible labels: A_base's 15000 action exposures in the same root order, but each exposure's target is one action
+# of the root's robust feasible set (drawn per seed and schedule position) instead of the single min-L1 label (as v5 m4_multi,
+# now on every training family).
+base: common.yaml
+run_family: A_multi
+exposures:
+  action_sft: 15000
+data:
+  target_choice: robust_set

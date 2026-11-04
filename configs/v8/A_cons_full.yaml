@@ -1,0 +1,8 @@
+# Full consequence coverage: A_base's 15000 action exposures plus every consequence_v4 record once (29,400: six candidate moves
+# per training scene), 5.4 times the consequence exposures of the compute-matched v4 A_cons.
+base: common.yaml
+run_family: A_cons_full
+exposures:
+  action_sft: 15000
+  consequence_v4: 29400
+probe_kinds: [action_sft, consequence_v4]

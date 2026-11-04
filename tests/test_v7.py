@@ -40,6 +40,9 @@ class Tasks(unittest.TestCase):
                 self.assertEqual(sum(p == 'eval_prompts/test_geom_predict.jsonl' for _, p in prompts), 3 if 'AG' in fams else 0)
                 self.assertEqual(sum(p == 'eval_prompts/test_geomact_true.jsonl' for _, p in prompts), 3 if 'A_geomact' in fams else 0)
                 self.assertEqual(sum(p == 'eval_prompts/test_geomact_mirror.jsonl' for _, p in prompts), 3 if 'A_geomact' in fams else 0)
+                self.assertEqual(sum(p == 'eval_prompts/test_V0_renamed_heldout.jsonl' for _, p in prompts), 3 * len(fams))
+                self.assertEqual(sum(p == 'eval_prompts/test_cons_panel.jsonl' for _, p in prompts), 3 if 'A_cons' in fams else 0)
+                self.assertEqual(sum(p == 'eval_prompts/validation_cons.jsonl' for _, p in prompts), 3 if 'A_cons' in fams else 0)
                 for r in rows:
                     self.assertEqual(r[4], '1')                       # batch 1, as in every earlier round
                     if r[0].split('/')[4] != 'B0-nothink':
