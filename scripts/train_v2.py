@@ -222,8 +222,8 @@ def main():
     dev = next(model.parameters()).device
     mine = [mb for st in layout for mb in st['ranks'][rank]]
     tc = cfg['data'].get('target_choice')
-    if tc not in (None, 'robust_set', 'feasible_set'):
-        raise SystemExit(f'data.target_choice {tc} is not robust_set or feasible_set')
+    if tc not in (None, 'robust_set', 'feasible_set', 'robust_set_prefix'):
+        raise SystemExit(f'data.target_choice {tc} is not robust_set, feasible_set or robust_set_prefix')
     dl = DataLoader(Items(seq, recs, processor, a.bundle, cfg['data']['max_length'], tc, a.seed), batch_sampler=mine, num_workers=a.workers,
                     collate_fn=lambda b: (collate(b, pad), [x['kind'] for x in b], [x['stats'] for x in b]))
     it = iter(dl)

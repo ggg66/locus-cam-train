@@ -13,7 +13,8 @@ import random
 ALLOWED = {'action_sft', 'geometry_sft', 'geometry_sft_v2',     # never outcome_records or geometry_sft_privileged
            'consequence_v4', 'geomact_v4', 'nextview_v4',   # v4 supervision study (training_exports/export_v4.py)
            'imagact_v5', 'inverse_v5',                      # v5 method study (training_exports/export_v5.py)
-           'propose_v6'}                                    # v6 ablation: imagact_v5 without the outcomes (scripts/make_propose_v6.py)
+           'propose_v6',                                    # v6 ablation: imagact_v5 without the outcomes (scripts/make_propose_v6.py)
+           'consequence_v9'}                                # v9: consequence_v4 format, 24 candidates per root (training_exports/export_v9.py)
 
 
 def read_jsonl(path):
@@ -46,11 +47,20 @@ def check_isolation(bundle, split, recs):
         raise ValueError(f'{len(bad)} records leak across splits, e.g. {bad[:3]}')
 
 
+def feasible_moves(rec, key='robust_set'):
+    """The moves of a record's robust_set / feasible_set as [right, up, back] lists, in sorted order."""
+    return sorted([int(x) for x in k.split(',')] for k in rec[key])
+
+
 def choose_target(rec, choice, seed, pos):
     """v5 method 4 (multi-solution targets): replace the single min-L1 action label of an action_sft record by one action
-    of its robust_set / feasible_set, drawn from a stream fixed by (seed, schedule position)."""
+    of its robust_set / feasible_set, drawn from a stream fixed by (seed, schedule position).
+    v9 'robust_set_prefix' (A_set): the answer first lists the whole robust set, then gives the unchanged min-L1 action;
+    the scorer reads the action from the last JSON block."""
     if not choice:
         return rec
+    if choice == 'robust_set_prefix':
+        return dict(rec, target=json.dumps({'feasible_moves': feasible_moves(rec)}) + '\n' + rec['target'])
     keys = sorted(rec[choice])
     k = random.Random(f'{seed}|target|{pos}').choice(keys)
     act = [int(x) for x in k.split(',')]

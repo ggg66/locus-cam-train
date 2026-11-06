@@ -26,7 +26,7 @@ RUNS = f'work/runs/{ROUND}'
 OUTS = f'work/outputs/v7/{ROUND}'
 CONS = [('test_cons_panel', 512), ('validation_cons', 512)]
 PER_FAMILY = {'AG': [('test_geom_predict', 1024)], 'A_geomact': [('test_geomact_true', 128), ('test_geomact_mirror', 128)],
-              'A_cons': CONS, 'A_cons_full': CONS}
+              'A_cons': CONS, 'A_cons_full': CONS, 'A_cons_dense': CONS}
 
 
 def cfg(name):

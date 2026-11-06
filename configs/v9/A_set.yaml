@@ -1,0 +1,10 @@
+# The whole feasible set as supervision: A_base's 15000 action exposures in the same root order; each answer first lists every
+# move of the root's robust feasible set ({"feasible_moves": [[right, up, back], ...]}, sorted), then gives A_base's min-L1 action.
+# The test prompt is unchanged; the scorer reads the action from the last JSON block.
+base: common.yaml
+run_family: A_set
+exposures:
+  action_sft: 15000
+data:
+  target_choice: robust_set_prefix
+eval_min_new_tokens: 1024    # robust sets have up to 28 moves; the action must not be cut off

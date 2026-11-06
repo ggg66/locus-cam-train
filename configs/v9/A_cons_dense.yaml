@@ -1,0 +1,9 @@
+# Dense consequence coverage: A_base's 15000 action exposures plus every consequence_v9 record once (111,634: up to 24
+# candidate moves per training root, 8 satisfied / 4 illegal / 12 unmet; consequence_v4 is a subset). 3.8 times v8
+# A_cons_full and 20.6 times v4 A_cons, in the same format.
+base: common.yaml
+run_family: A_cons_dense
+exposures:
+  action_sft: 15000
+  consequence_v9: 111634
+probe_kinds: [action_sft, consequence_v4]   # validation records exist in the v4 format only; same format

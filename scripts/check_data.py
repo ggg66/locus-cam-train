@@ -14,7 +14,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from lcam import config as C  # noqa: E402
-from lcam.data import check_isolation, load_exports  # noqa: E402
+from lcam.data import check_isolation, choose_target, load_exports  # noqa: E402
 from lcam.encode import IGNORE, EncodeError, encode  # noqa: E402
 from lcam.model import load_processor  # noqa: E402
 
@@ -31,6 +31,7 @@ def main():
     ap.add_argument('--split', default='train')
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--kinds', nargs='+', default=['action_sft', 'geometry_sft'], help='v2: action_sft geometry_sft_v2')
+    ap.add_argument('--target-choice', default=None, help="action_sft targets as a run builds them (v9 A_set: robust_set_prefix)")
     a = ap.parse_args()
     cfg = C.load(a.config)
     processor = load_processor(cfg)
@@ -39,7 +40,9 @@ def main():
     out = {'split': a.split, 'max_length': cfg['data']['max_length'], 'processor': cfg['processor'], 'kinds': {}}
     for kind, rs in recs.items():
         stats, errors, example = [], [], None
-        for r in rs[:a.limit or None]:
+        for pos, r in enumerate(rs[:a.limit or None]):
+            if kind == 'action_sft' and a.target_choice:
+                r = choose_target(r, a.target_choice, 0, pos)
             try:
                 e = encode(processor, a.bundle, r, cfg['data']['max_length'])
             except EncodeError as ex:
@@ -57,7 +60,7 @@ def main():
                               'example': example}
     out['pass'] = all(v['n_errors'] == 0 for v in out['kinds'].values())
     os.makedirs(os.path.join(a.bundle, 'checks'), exist_ok=True)
-    name = f'check_data-{a.split}' + ('' if a.kinds == ['action_sft', 'geometry_sft'] else '-' + '-'.join(a.kinds))
+    name = f'check_data-{a.split}' + ('' if a.kinds == ['action_sft', 'geometry_sft'] else '-' + '-'.join(a.kinds)) + (f'-{a.target_choice}' if a.target_choice else '')
     json.dump(out, open(os.path.join(a.bundle, 'checks', f'{name}.json'), 'w'), ensure_ascii=False, indent=1)
     print(json.dumps(out, ensure_ascii=False, indent=1))
 
