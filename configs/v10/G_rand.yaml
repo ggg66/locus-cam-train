@@ -1,0 +1,8 @@
+# Geometry only, from random structures: 5,053 geometry_rand_v10 records (benchmark generator/random_structures.py: targets and
+# obstacles placed at random with the training nouns only, no family template), 15,000 exposures. Same prompt, answer format,
+# hidden-field defaults and record count as G_fam; only the scene structures differ.
+base: common.yaml
+run_family: G_rand
+exposures:
+  geometry_rand_v10: 15000
+probe_kinds: [geometry_sft_v2]

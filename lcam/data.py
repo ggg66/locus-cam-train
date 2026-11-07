@@ -14,7 +14,8 @@ ALLOWED = {'action_sft', 'geometry_sft', 'geometry_sft_v2',     # never outcome_
            'consequence_v4', 'geomact_v4', 'nextview_v4',   # v4 supervision study (training_exports/export_v4.py)
            'imagact_v5', 'inverse_v5',                      # v5 method study (training_exports/export_v5.py)
            'propose_v6',                                    # v6 ablation: imagact_v5 without the outcomes (scripts/make_propose_v6.py)
-           'consequence_v9'}                                # v9: consequence_v4 format, 24 candidates per root (training_exports/export_v9.py)
+           'consequence_v9',                                # v9: consequence_v4 format, 24 candidates per root (training_exports/export_v9.py)
+           'geometry_rand_v10'}                             # v10: geometry_sft_v2 format on random-structure scenes (training_exports/export_v10.py)
 
 
 def read_jsonl(path):

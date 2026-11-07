@@ -1,0 +1,7 @@
+# Geometry only, from the ten training families: the 5,053 geometry_sft_v2 records of the train split (the geometry source of
+# v2 AG), 15,000 exposures (the optimizer steps of A_base). The control of G_rand: same record count, same exposures.
+base: common.yaml
+run_family: G_fam
+exposures:
+  geometry_sft_v2: 15000
+probe_kinds: [geometry_sft_v2]
