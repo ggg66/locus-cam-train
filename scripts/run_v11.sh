@@ -11,7 +11,7 @@
 #   test_blind_true / test_blind_grand_s<k> / test_blind_gfam_s<k> (D_*).
 #
 #   LOCUS_ROOT=/shared/project NODES=/shared/project/work/v11/nodes.txt \
-#     ADDON_TAR=/shared/project/data/locus-bundle-v1.7.0-addon-v11.tar ADDON_SHA256=<sha256> \
+#     ADDON_TAR=/shared/project/data/locus-bundle-v1.7.0-addon-v11.tar [ADDON_SHA256=<sha256 of the tar>] \
 #     nohup scripts/run_v11.sh > /dev/null 2>&1 &
 #
 # Stages: setup, unit, check, train (18 runs, one per node at a time), test, pack.
@@ -44,9 +44,8 @@ do_setup() {
   "$PY" -c "import sys, transformers, peft, torch; from transformers.models.auto.configuration_auto import CONFIG_MAPPING as M; print('transformers', transformers.__version__, 'peft', peft.__version__, 'torch', torch.__version__); sys.exit(0 if 'qwen3_5_moe' in M else 1)" \
     || fail 'this venv cannot load qwen3_5_moe (use the venv of the v9 run)'
   "$PY" -c "import json,sys; c=json.load(open('$LCAM_MODEL/config.json')); sys.exit(0 if c['model_type']=='qwen3_5_moe' else 1)" || fail "$LCAM_MODEL is not Qwen3.5-35B-A3B"
-  if [ -n "${ADDON_TAR:-}" ]; then
-    : "${ADDON_SHA256:?set ADDON_SHA256 with ADDON_TAR}"
-    echo "$ADDON_SHA256  $ADDON_TAR" | sha256sum -c - || fail 'add-on sha256 differs'
+  if [ -n "${ADDON_TAR:-}" ]; then      # every file is then checked against ADDON_V11_MANIFEST.json below
+    if [ -n "${ADDON_SHA256:-}" ]; then echo "$ADDON_SHA256  $ADDON_TAR" | sha256sum -c - || fail 'add-on sha256 differs'; fi
     tar -xf "$ADDON_TAR" -C "$BUNDLE" || fail 'could not extract the add-on'
   fi
   [ -f "$BUNDLE/ADDON_V11_MANIFEST.json" ] || fail 'the v11 add-on is not in the bundle (set ADDON_TAR and ADDON_SHA256)'
@@ -148,7 +147,8 @@ do_test() {     # the pre-registered prompts on the endpoint checkpoint of every
   pool "$W/tasks-v11-test.txt"
   for p in test_V0:3600 test_geomact_true:1800 test_geomact_mirror:1800 test_geom_predict:3600 test_blind_true:3600 "test_blind_grand_s*":3600 "test_blind_gfam_s*":3600; do
     want=${p#*:}; p=${p%%:*}
-    n=$(cat "$LOCUS_ROOT"/work/outputs/v11/*/$p.jsonl | wc -l | tr -d " ")
+    files=$(ls "$LOCUS_ROOT"/work/outputs/v11/*/$p.jsonl 2>/dev/null) || fail "no $p answers in work/outputs/v11"
+    n=$(cat $files | wc -l | tr -d " ")
     [ "$n" = "$want" ] || fail "expected $want $p answers, found $n"
   done
 }
