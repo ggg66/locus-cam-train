@@ -10,7 +10,7 @@ from lcam.data import ALLOWED, schedule_v2
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CFG = os.path.join(HERE, 'configs')
-FAMS = ['A_rand', 'D_fam', 'D_rand', 'GA_rand', 'G_k10', 'G_rand_r']
+FAMS = ['A_rand', 'D_fam', 'D_fam_anon', 'D_rand', 'GA_rand', 'G_k10', 'G_rand_r']
 
 
 def cfg(f):
@@ -29,7 +29,8 @@ class Configs(unittest.TestCase):
 
     def test_one_source_per_run_and_matching_exposures(self):
         exp = {'A_rand': {'action_rand_v11': 15000}, 'GA_rand': {'geomact_rand_v11': 19072}, 'G_rand_r': {'geometry_randr_v11': 15000},
-               'G_k10': {'geometry_randk10_v11': 15000}, 'D_fam': {'blind_fam_v11': 15000}, 'D_rand': {'blind_rand_v11': 15000}}
+               'G_k10': {'geometry_randk10_v11': 15000}, 'D_fam': {'blind_fam_v11': 15000}, 'D_rand': {'blind_rand_v11': 15000},
+               'D_fam_anon': {'blind_fam_anon_v11': 15000}}
         a_base, a_geomact = C.load(os.path.join(CFG, 'v2', 'A_base.yaml')), C.load(os.path.join(CFG, 'v10', 'G_fam.yaml'))
         self.assertEqual(a_base['exposures']['action_sft'], 15000)
         self.assertEqual(a_geomact['exposures']['geometry_sft_v2'], 15000)
@@ -75,9 +76,12 @@ class Tasks(unittest.TestCase):
                 by.setdefault(r[1], []).append(r)
             want = {'eval_prompts/test_V0.jsonl': 6, 'eval_prompts/test_geomact_true.jsonl': 3,
                     'eval_prompts/test_geomact_mirror.jsonl': 3, 'eval_prompts/test_geom_predict.jsonl': 6, 'eval_prompts/test_blind_true.jsonl': 6}
+            want['eval_prompts/test_blind_anon_true.jsonl'] = 3
             for k in (0, 1, 2):
                 want[f'eval_prompts/test_blind_grand_s{k}.jsonl'] = 2
                 want[f'eval_prompts/test_blind_gfam_s{k}.jsonl'] = 2
+                want[f'eval_prompts/test_blind_anon_grand_s{k}.jsonl'] = 1
+                want[f'eval_prompts/test_blind_anon_gfam_s{k}.jsonl'] = 1
             self.assertEqual({k: len(v) for k, v in by.items()}, want)
             for r in rows:                                               # a blind run reads the predictions of its own seed
                 if '/D_' in r[0] and ('grand' in r[1] or 'gfam' in r[1]):
@@ -91,7 +95,7 @@ class Tasks(unittest.TestCase):
             p = subprocess.run([sys.executable, os.path.join(HERE, 'scripts', 'make_v11_tasks.py'), '--root', root],
                                capture_output=True, text=True, check=True)
             self.assertEqual(p.stdout, '')
-            self.assertEqual(len(p.stderr.split()), 18)
+            self.assertEqual(len(p.stderr.split()), 21)
 
 
 if __name__ == '__main__':

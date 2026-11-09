@@ -18,7 +18,7 @@ ALLOWED = {'action_sft', 'geometry_sft', 'geometry_sft_v2',     # never outcome_
            'geometry_rand_v10',                             # v10: geometry_sft_v2 format on random-structure scenes (training_exports/export_v10.py)
            'action_rand_v11', 'geomact_rand_v11', 'geometry_randr_v11',   # v11 (training_exports/export_v11.py): retained random scenes
            'geometry_randk10_v11',                                         # v11: 10 fixed random structures
-           'blind_fam_v11', 'blind_rand_v11'}                              # v11: images withheld, geometry in the prompt
+           'blind_fam_v11', 'blind_rand_v11', 'blind_fam_anon_v11'}        # v11: images withheld, geometry in the prompt
 
 
 def read_jsonl(path):

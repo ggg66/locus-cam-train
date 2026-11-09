@@ -10,6 +10,8 @@
   D_fam, D_rand         images withheld, geometry in the prompt (addon v11): test_blind_true (true geometry in the training-answer
                         format), test_blind_grand_s<k> and test_blind_gfam_s<k> (the geometry v10 G_rand-s<k> / G_fam-s<k>
                         predicted; seed k of the D run), 512 new tokens
+  D_fam_anon            the same three prompts without object names: test_blind_anon_true, test_blind_anon_grand_s<k>,
+                        test_blind_anon_gfam_s<k>
 Greedy, thinking off, batch 1. Runs whose endpoint checkpoint is missing are listed on stderr and skipped.
 """
 import argparse
@@ -24,12 +26,13 @@ ROUND = 'v11'
 GEOM = [('test_geom_predict', 1024)]
 PROMPTS = {'A_rand': [('test_V0', 512)],
            'GA_rand': [('test_V0', 1024), ('test_geomact_true', 128), ('test_geomact_mirror', 128)],
-           'G_rand_r': GEOM, 'G_k10': GEOM, 'D_fam': 'blind', 'D_rand': 'blind'}
+           'G_rand_r': GEOM, 'G_k10': GEOM, 'D_fam': 'blind', 'D_rand': 'blind', 'D_fam_anon': 'blind_anon'}
 
 
 def prompts(f, seed):
-    if PROMPTS[f] == 'blind':
-        return [('test_blind_true', 512), (f'test_blind_grand_s{seed}', 512), (f'test_blind_gfam_s{seed}', 512)]
+    if PROMPTS[f] in ('blind', 'blind_anon'):
+        x = 'test_blind_' if PROMPTS[f] == 'blind' else 'test_blind_anon_'
+        return [(f'{x}true', 512), (f'{x}grand_s{seed}', 512), (f'{x}gfam_s{seed}', 512)]
     return PROMPTS[f]
 
 

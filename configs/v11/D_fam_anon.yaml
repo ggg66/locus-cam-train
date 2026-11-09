@@ -1,0 +1,9 @@
+# Blind decisions on the training families without object names: D_fam with every object name in the prompt (task line,
+# goal, geometry) replaced by 人物1, 人物2, ... (targets) and 物体1, 物体2, ... (other objects). 15,000 exposures.
+# Question: with the images and the names gone, is a family still recognisable from the numbers alone?
+base: common.yaml
+run_family: D_fam_anon
+anchor: blind_fam_anon_v11
+exposures:
+  blind_fam_anon_v11: 15000
+probe_kinds: [action_sft]

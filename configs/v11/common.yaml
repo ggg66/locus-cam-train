@@ -45,6 +45,7 @@ loss:
     geometry_randk10_v11: 1.0
     blind_fam_v11: 1.0
     blind_rand_v11: 1.0
+    blind_fam_anon_v11: 1.0
 checkpoints:
   at_fraction: [0.25, 0.5, 0.75, 1.0]   # of the planned optimizer steps, same for every run family
   primary: 1.0                          # the pre-registered endpoint; validation-best among these four is reported separately

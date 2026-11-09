@@ -1,20 +1,21 @@
 #!/bin/bash
 # v11 (docs/v11/README.md): what structural diversity fixes. Every step of the round in one command, on the main split.
-#   Training (Qwen3.5-35B-A3B, the v2 protocol, 3 seeds each), 18 runs:
+#   Training (Qwen3.5-35B-A3B, the v2 protocol, 3 seeds each), 21 runs:
 #     A_rand    5,053 retained random scenes, V0 prompt -> action (labels as action_sft), 15,000 exposures
 #     GA_rand   the same scenes, V0 prompt -> geometry, newline, action (geomact_v4 format), 19,072 exposures
 #     G_rand_r  the same scenes, geometry only (geometry_sft_v2 format), 15,000 exposures
 #     G_k10     geometry only, 5,053 scenes from 10 fixed random structures, 15,000 exposures
 #     D_fam     images withheld, geometry in the prompt -> action, the 5,053 family training scenes, 15,000 exposures
 #     D_rand    the same on the retained random scenes, 15,000 exposures
+#     D_fam_anon  D_fam with every object name replaced by 人物<i> / 物体<j>, 15,000 exposures
 #   Then on every endpoint: test_V0 (A_rand, GA_rand), test_geomact_true / _mirror (GA_rand), test_geom_predict (G_*),
-#   test_blind_true / test_blind_grand_s<k> / test_blind_gfam_s<k> (D_*).
+#   test_blind_true / test_blind_grand_s<k> / test_blind_gfam_s<k> (D_fam, D_rand), test_blind_anon_* (D_fam_anon).
 #
 #   LOCUS_ROOT=/shared/project NODES=/shared/project/work/v11/nodes.txt \
 #     ADDON_TAR=/shared/project/data/locus-bundle-v1.7.0-addon-v11.tar [ADDON_SHA256=<sha256 of the tar>] \
 #     nohup scripts/run_v11.sh > /dev/null 2>&1 &
 #
-# Stages: setup, unit, check, train (18 runs, one per node at a time), test, pack.
+# Stages: setup, unit, check, train (21 runs, one per node at a time), test, pack.
 # Finished stages and runs are skipped, so after a stop fix the cause and run the same command again.
 set -euo pipefail
 export LCAM_ROUND=v11
@@ -22,9 +23,9 @@ source "$(dirname "$0")/../launch/env.sh"
 cd "$LCAM_CODE"
 W=$LOCUS_ROOT/work/v11
 ST=$W/stages
-RUNSPEC=$(for f in A_rand GA_rand G_rand_r G_k10 D_fam D_rand; do for s in 0 1 2; do echo "v11 $f $s"; done; done)
+RUNSPEC=$(for f in A_rand GA_rand G_rand_r G_k10 D_fam D_rand D_fam_anon; do for s in 0 1 2; do echo "v11 $f $s"; done; done)
 N_REC=5053
-KINDS="action_rand_v11 geomact_rand_v11 geometry_randr_v11 geometry_randk10_v11 blind_fam_v11 blind_rand_v11"
+KINDS="action_rand_v11 geomact_rand_v11 geometry_randr_v11 geometry_randk10_v11 blind_fam_v11 blind_rand_v11 blind_fam_anon_v11"
 mkdir -p "$W" "$ST" "$LOCUS_ROOT/work/logs" "$LOCUS_ROOT/work/runs/v11"
 exec > >(tee -a "$W/run_v11.log") 2>&1
 for r in ${REDO:-}; do rm -f "${ST:?}/${r:?}.ok"; done
@@ -56,7 +57,8 @@ do_setup() {
   done
   for f in training_exports/validation/action_sft.jsonl training_exports/validation/geomact_v4.jsonl training_exports/validation/geometry_sft_v2.jsonl \
            eval_prompts/test_V0.jsonl eval_prompts/test_geomact_true.jsonl eval_prompts/test_geomact_mirror.jsonl eval_prompts/test_geom_predict.jsonl \
-           eval_prompts/test_blind_true.jsonl eval_prompts/test_blind_grand_s0.jsonl eval_prompts/test_blind_gfam_s2.jsonl public/blank/main.png splits_index.json; do
+           eval_prompts/test_blind_true.jsonl eval_prompts/test_blind_grand_s0.jsonl eval_prompts/test_blind_gfam_s2.jsonl \
+           eval_prompts/test_blind_anon_true.jsonl eval_prompts/test_blind_anon_grand_s0.jsonl eval_prompts/test_blind_anon_gfam_s2.jsonl public/blank/main.png splits_index.json; do
     [ -f "$BUNDLE/$f" ] || fail "$BUNDLE/$f missing: the bundle of the v10 run plus the v11 add-on is needed"
   done
   for k in $KINDS; do
@@ -99,7 +101,7 @@ one_run() {     # one_run <round> <family> <seed> <ip>: one training run on the 
   ssh -o StrictHostKeyChecking=no -o ConnectTimeout=20 -o BatchMode=yes "$ip" "$cmd" </dev/null
 }
 
-do_train() {    # the 18 runs, one per node at a time
+do_train() {    # the 21 runs, one per node at a time
   local r f s p n=0 failed=""; local -a nodes pids     # pids: a plain `wait` would also wait for the log's tee
   mapfile -t nodes < <(node_list)
   while read -r r f s; do
@@ -145,7 +147,7 @@ do_test() {     # the pre-registered prompts on the endpoint checkpoint of every
   "$PY" scripts/make_v11_tasks.py --root "$LOCUS_ROOT" > "$W/tasks-v11-test.txt" 2> "$W/test-missing.txt" || fail 'test tasks'
   [ -s "$W/test-missing.txt" ] && fail "endpoint checkpoints missing: $(cat "$W/test-missing.txt")"
   pool "$W/tasks-v11-test.txt"
-  for p in test_V0:3600 test_geomact_true:1800 test_geomact_mirror:1800 test_geom_predict:3600 test_blind_true:3600 "test_blind_grand_s*":3600 "test_blind_gfam_s*":3600; do
+  for p in test_V0:3600 test_geomact_true:1800 test_geomact_mirror:1800 test_geom_predict:3600 test_blind_true:3600 "test_blind_grand_s*":3600 "test_blind_gfam_s*":3600 test_blind_anon_true:1800 "test_blind_anon_grand_s*":1800 "test_blind_anon_gfam_s*":1800; do
     want=${p#*:}; p=${p%%:*}
     files=$(ls "$LOCUS_ROOT"/work/outputs/v11/*/$p.jsonl 2>/dev/null) || fail "no $p answers in work/outputs/v11"
     n=$(cat $files | wc -l | tr -d " ")
