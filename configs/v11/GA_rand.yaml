@@ -1,0 +1,12 @@
+# Geometry, then the decision, from random scenes: geomact_v4 format (V0 prompt -> geometry, newline, action) on the same 5,053
+# retained random scenes, roots in A_rand's order. 19,072 exposures, the count of v4 A_geomact (Geometry->Action).
+# Question: trained on many structures, does the decision follow the geometry it is given on held-out structures?
+base: common.yaml
+run_family: GA_rand
+anchor: geomact_rand_v11
+pool_streams:
+  geomact_rand_v11: action_rand_v11
+exposures:
+  geomact_rand_v11: 19072
+probe_kinds: [geomact_v4]
+eval_min_new_tokens: 1024    # the answer holds the geometry before the action, as A_geomact

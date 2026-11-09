@@ -1,0 +1,8 @@
+# Geometry only, on exactly A_rand's 5,053 retained random scenes (geometry_sft_v2 format). The geometry control of A_rand and
+# GA_rand: same scenes, so a difference to A_rand is the difference between learning the decision and learning the geometry.
+base: common.yaml
+run_family: G_rand_r
+anchor: geometry_randr_v11
+exposures:
+  geometry_randr_v11: 15000
+probe_kinds: [geometry_sft_v2]

@@ -1,0 +1,10 @@
+# Blind decisions on the training families: the 5,053 family training scenes, the images withheld (two blank frames, and the
+# prompt says so), the scene geometry written into the prompt (geometry_sft_v2 numbers, hidden fields at their defaults) ->
+# the action_sft label. 15,000 exposures, as A_base (Action).
+# Question: without the images, does a decision learned on the same ten structures transfer?
+base: common.yaml
+run_family: D_fam
+anchor: blind_fam_v11
+exposures:
+  blind_fam_v11: 15000
+probe_kinds: [action_sft]

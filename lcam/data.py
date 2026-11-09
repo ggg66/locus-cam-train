@@ -15,7 +15,10 @@ ALLOWED = {'action_sft', 'geometry_sft', 'geometry_sft_v2',     # never outcome_
            'imagact_v5', 'inverse_v5',                      # v5 method study (training_exports/export_v5.py)
            'propose_v6',                                    # v6 ablation: imagact_v5 without the outcomes (scripts/make_propose_v6.py)
            'consequence_v9',                                # v9: consequence_v4 format, 24 candidates per root (training_exports/export_v9.py)
-           'geometry_rand_v10'}                             # v10: geometry_sft_v2 format on random-structure scenes (training_exports/export_v10.py)
+           'geometry_rand_v10',                             # v10: geometry_sft_v2 format on random-structure scenes (training_exports/export_v10.py)
+           'action_rand_v11', 'geomact_rand_v11', 'geometry_randr_v11',   # v11 (training_exports/export_v11.py): retained random scenes
+           'geometry_randk10_v11',                                         # v11: 10 fixed random structures
+           'blind_fam_v11', 'blind_rand_v11'}                              # v11: images withheld, geometry in the prompt
 
 
 def read_jsonl(path):

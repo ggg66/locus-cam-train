@@ -1,0 +1,9 @@
+# Geometry only, from K = 10 fixed random structures (benchmark generator/random_v11.py templates 10): 5,053 scenes, each a
+# rescaled and jittered layout of one structure, under the v10 acceptance rules. Against G_fam (10 designed families): the same
+# number of structures, random instead of designed.
+base: common.yaml
+run_family: G_k10
+anchor: geometry_randk10_v11
+exposures:
+  geometry_randk10_v11: 15000
+probe_kinds: [geometry_sft_v2]

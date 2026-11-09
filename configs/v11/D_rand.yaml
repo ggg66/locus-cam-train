@@ -1,0 +1,9 @@
+# Blind decisions on random scenes: A_rand's 5,053 retained random scenes, images withheld, the geometry of geometry_randr_v11
+# written into the prompt -> the action_rand_v11 label. 15,000 exposures. With GA_rand (same scenes and labels, images shown),
+# isolates the images; with D_fam, the structures.
+base: common.yaml
+run_family: D_rand
+anchor: blind_rand_v11
+exposures:
+  blind_rand_v11: 15000
+probe_kinds: [action_sft]

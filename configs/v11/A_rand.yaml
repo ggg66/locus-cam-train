@@ -1,0 +1,9 @@
+# Decisions from random scenes: the 5,053 retained random scenes (benchmark generator/random_v11.py: v10 random layouts that pass
+# the retention rules R1-R6), the V0 prompt -> the action, labelled exactly as action_sft. 15,000 exposures, as A_base (Action).
+# Question: does structural diversity make a learned decision transfer?
+base: common.yaml
+run_family: A_rand
+anchor: action_rand_v11
+exposures:
+  action_rand_v11: 15000
+probe_kinds: [action_sft]
